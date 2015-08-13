@@ -42,6 +42,22 @@ describe('boolean attr directives', function() {
   }));
 
 
+  it('should not bind checked when ngModel is present', inject(function($rootScope, $compile) {
+    // test for https://github.com/angular/angular.js/issues/10662
+    element = $compile('<input type="checkbox" ng-model="value" ng-false-value="\'false\'" ' +
+      'ng-true-value="\'true\'" ng-checked="value" />')($rootScope);
+    $rootScope.value = 'true';
+    $rootScope.$digest();
+    expect(element[0].checked).toBe(true);
+    browserTrigger(element, 'click');
+    expect(element[0].checked).toBe(false);
+    expect($rootScope.value).toBe('false');
+    browserTrigger(element, 'click');
+    expect(element[0].checked).toBe(true);
+    expect($rootScope.value).toBe('true');
+  }));
+
+
   it('should bind selected', inject(function($rootScope, $compile) {
     element = $compile('<select><option value=""></option><option ng-selected="isSelected">Greetings!</option></select>')($rootScope);
     jqLite(document.body).append(element);
@@ -89,8 +105,6 @@ describe('boolean attr directives', function() {
 
 
     it('should throw an exception if binding to multiple attribute', inject(function($rootScope, $compile) {
-      if (msie < 9) return; //IE8 doesn't support biding to boolean attributes
-
       expect(function() {
         $compile('<select multiple="{{isMultiple}}"></select>');
       }).toThrowMinErr('$compile', 'selmulti', 'Binding to the \'multiple\' attribute is not supported. ' +
@@ -250,6 +264,23 @@ describe('ngHref', function() {
     element = $compile('<a ng-href="http://server"></a>')($rootScope);
     $rootScope.$digest();
     expect(element.attr('href')).toEqual('http://server');
+  }));
+
+  it('should not set the href if ng-href is empty', inject(function($rootScope, $compile) {
+    $rootScope.url = null;
+    element = $compile('<a ng-href="{{url}}">')($rootScope);
+    $rootScope.$digest();
+    expect(element.attr('href')).toEqual(undefined);
+  }));
+
+  it('should remove the href if ng-href changes to empty', inject(function($rootScope, $compile) {
+    $rootScope.url = 'http://www.google.com/';
+    element = $compile('<a ng-href="{{url}}">')($rootScope);
+    $rootScope.$digest();
+
+    $rootScope.url = null;
+    $rootScope.$digest();
+    expect(element.attr('href')).toEqual(undefined);
   }));
 
   if (isDefined(window.SVGElement)) {

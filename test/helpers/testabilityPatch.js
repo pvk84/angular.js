@@ -24,16 +24,30 @@ beforeEach(function() {
     }
 
     // This resets global id counter;
-    uid = ['0', '0', '0'];
+    uid = 0;
 
     // reset to jQuery or default to us.
     bindJQuery();
+    jqLiteCacheSizeInit();
   }
 
   angular.element(document.body).empty().removeData();
 });
 
 afterEach(function() {
+  var count, cache;
+
+  // both of these nodes are persisted across tests
+  // and therefore the hashCode may be cached
+  var node = document.querySelector('html');
+  if (node) {
+    node.$$hashKey = null;
+  }
+  var bod = document.body;
+  if (bod) {
+    bod.$$hashKey = null;
+  }
+
   if (this.$injector) {
     var $rootScope = this.$injector.get('$rootScope');
     var $rootElement = this.$injector.get('$rootElement');
@@ -46,43 +60,35 @@ afterEach(function() {
     $log.assertEmpty && $log.assertEmpty();
   }
 
-  // complain about uncleared jqCache references
-  var count = 0;
+  if (!window.jQuery) {
+    // jQuery 2.x doesn't expose the cache storage.
 
-  // This line should be enabled as soon as this bug is fixed: http://bugs.jquery.com/ticket/11775
-  //var cache = jqLite.cache;
-  var cache = angular.element.cache;
+    // complain about uncleared jqCache references
+    count = 0;
 
-  forEachSorted(cache, function(expando, key){
-    angular.forEach(expando.data, function(value, key){
-      count ++;
-      if (value && value.$element) {
-        dump('LEAK', key, value.$id, sortedHtml(value.$element));
-      } else {
-        dump('LEAK', key, angular.toJson(value));
-      }
+    cache = angular.element.cache;
+
+    forEachSorted(cache, function(expando, key) {
+      angular.forEach(expando.data, function(value, key) {
+        count++;
+        if (value && value.$element) {
+          dump('LEAK', key, value.$id, sortedHtml(value.$element));
+        } else {
+          dump('LEAK', key, angular.toJson(value));
+        }
+      });
     });
-  });
-  if (count) {
-    throw new Error('Found jqCache references that were not deallocated! count: ' + count);
+    if (count) {
+      throw new Error('Found jqCache references that were not deallocated! count: ' + count);
+    }
   }
 
 
   // copied from Angular.js
-  // we need these two methods here so that we can run module tests with wrapped angular.js
-  function sortedKeys(obj) {
-    var keys = [];
-    for (var key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        keys.push(key);
-      }
-    }
-    return keys.sort();
-  }
-
+  // we need this method here so that we can run module tests with wrapped angular.js
   function forEachSorted(obj, iterator, context) {
-    var keys = sortedKeys(obj);
-    for ( var i = 0; i < keys.length; i++) {
+    var keys = Object.keys(obj).sort();
+    for (var i = 0; i < keys.length; i++) {
       iterator.call(context, obj[keys[i]], keys[i]);
     }
     return keys;
@@ -95,8 +101,9 @@ function dealoc(obj) {
   if (obj) {
     if (angular.isElement(obj)) {
       cleanup(angular.element(obj));
-    } else {
-      for(var key in jqCache) {
+    } else if (!window.jQuery) {
+      // jQuery 2.x doesn't expose the cache storage.
+      for (var key in jqCache) {
         var value = jqCache[key];
         if (value.data && value.data.$scope == obj) {
           delete jqCache[key];
@@ -107,16 +114,34 @@ function dealoc(obj) {
 
   function cleanup(element) {
     element.off().removeData();
+    if (window.jQuery) {
+      // jQuery 2.x doesn't expose the cache storage; ensure all element data
+      // is removed during its cleanup.
+      jQuery.cleanData([element]);
+    }
     // Note:  We aren't using element.contents() here.  Under jQuery, element.contents() can fail
     // for IFRAME elements.  jQuery explicitly uses (element.contentDocument ||
     // element.contentWindow.document) and both properties are null for IFRAMES that aren't attached
     // to a document.
     var children = element[0].childNodes || [];
-    for ( var i = 0; i < children.length; i++) {
+    for (var i = 0; i < children.length; i++) {
       cleanup(angular.element(children[i]));
     }
   }
 }
+
+
+function jqLiteCacheSize() {
+  var size = 0;
+  forEach(jqLite.cache, function() { size++; });
+  return size - jqLiteCacheSize.initSize;
+}
+jqLiteCacheSize.initSize = 0;
+
+function jqLiteCacheSizeInit() {
+  jqLiteCacheSize.initSize = jqLiteCacheSize.initSize + jqLiteCacheSize();
+}
+
 
 /**
  * @param {DOMElement} element
@@ -128,7 +153,7 @@ function sortedHtml(element, showNgClass) {
 
     if (node.nodeName == "#text") {
       html += node.nodeValue.
-        replace(/&(\w+[&;\W])?/g, function(match, entity){return entity?match:'&amp;';}).
+        replace(/&(\w+[&;\W])?/g, function(match, entity) {return entity ? match : '&amp;';}).
         replace(/</g, '&lt;').
         replace(/>/g, '&gt;');
     } else if (node.nodeName == "#comment") {
@@ -145,26 +170,27 @@ function sortedHtml(element, showNgClass) {
       if (className) {
         attrs.push(' class="' + className + '"');
       }
-      for(var i=0; i<attributes.length; i++) {
-        if (i>0 && attributes[i] == attributes[i-1])
+      for (var i = 0; i < attributes.length; i++) {
+        if (i > 0 && attributes[i] == attributes[i - 1]) {
           continue; //IE9 creates dupes. Ignore them!
+        }
 
         var attr = attributes[i];
-        if(attr.name.match(/^ng[\:\-]/) ||
+        if (attr.name.match(/^ng[\:\-]/) ||
             (attr.value || attr.value === '') &&
-            attr.value !='null' &&
-            attr.value !='auto' &&
-            attr.value !='false' &&
-            attr.value !='inherit' &&
-            (attr.value !='0' || attr.name =='value') &&
-            attr.name !='loop' &&
-            attr.name !='complete' &&
-            attr.name !='maxLength' &&
-            attr.name !='size' &&
-            attr.name !='class' &&
-            attr.name !='start' &&
-            attr.name !='tabIndex' &&
-            attr.name !='style' &&
+            attr.value != 'null' &&
+            attr.value != 'auto' &&
+            attr.value != 'false' &&
+            attr.value != 'inherit' &&
+            (attr.value != '0' || attr.name == 'value') &&
+            attr.name != 'loop' &&
+            attr.name != 'complete' &&
+            attr.name != 'maxLength' &&
+            attr.name != 'size' &&
+            attr.name != 'class' &&
+            attr.name != 'start' &&
+            attr.name != 'tabIndex' &&
+            attr.name != 'style' &&
             attr.name.substr(0, 6) != 'jQuery') {
           // in IE we need to check for all of these.
           if (/ng\d+/.exec(attr.name) ||
@@ -187,18 +213,18 @@ function sortedHtml(element, showNgClass) {
       if (node.style) {
         var style = [];
         if (node.style.cssText) {
-          forEach(node.style.cssText.split(';'), function(value){
+          forEach(node.style.cssText.split(';'), function(value) {
             value = trim(value);
             if (value) {
               style.push(lowercase(value));
             }
           });
         }
-        for(var css in node.style){
+        for (var css in node.style) {
           var value = node.style[css];
-          if (isString(value) && isString(css) && css != 'cssText' && value && (1*css != css)) {
+          if (isString(value) && isString(css) && css != 'cssText' && value && (1 * css != css)) {
             var text = lowercase(css + ': ' + value);
-            if (value != 'false' && indexOf(style, text) == -1) {
+            if (value != 'false' && style.indexOf(text) == -1) {
               style.push(text);
             }
           }
@@ -206,9 +232,10 @@ function sortedHtml(element, showNgClass) {
         style.sort();
         var tmp = style;
         style = [];
-        forEach(tmp, function(value){
-          if (!value.match(/^max[^\-]/))
+        forEach(tmp, function(value) {
+          if (!value.match(/^max[^\-]/)) {
             style.push(value);
+          }
         });
         if (style.length) {
           html += ' style="' + style.join('; ') + ';"';
@@ -216,7 +243,7 @@ function sortedHtml(element, showNgClass) {
       }
       html += '>';
       var children = node.childNodes;
-      for(var j=0; j<children.length; j++) {
+      for (var j = 0; j < children.length; j++) {
         toString(children[j]);
       }
       html += '</' + node.nodeName.toLowerCase() + '>';
@@ -249,13 +276,13 @@ function isCssVisible(node) {
 
 function assertHidden(node) {
   if (isCssVisible(node)) {
-    throw new Error('Node should be hidden but was visible: ' + angular.module.ngMock.dump(node));
+    throw new Error('Node should be hidden but was visible: ' + angular.mock.dump(node));
   }
 }
 
 function assertVisible(node) {
   if (!isCssVisible(node)) {
-    throw new Error('Node should be visible but was hidden: ' + angular.module.ngMock.dump(node));
+    throw new Error('Node should be visible but was hidden: ' + angular.mock.dump(node));
   }
 }
 
@@ -299,16 +326,83 @@ function provideLog($provide) {
 }
 
 function pending() {
-  dump('PENDING');
+  window.dump('PENDING');
 }
 
 function trace(name) {
-  dump(new Error(name).stack);
+  window.dump(new Error(name).stack);
 }
 
-var karmaDump = dump;
-window.dump = function () {
-  karmaDump.apply(undefined, map(arguments, function(arg) {
+var karmaDump = window.dump || function() {
+  window.console.log.apply(window.console, arguments);
+};
+
+window.dump = function() {
+  karmaDump.apply(undefined, Array.prototype.map.call(arguments, function(arg) {
     return angular.mock.dump(arg);
   }));
 };
+
+function getInputCompileHelper(currentSpec) {
+
+  var helper = {};
+
+  module(function($compileProvider) {
+    $compileProvider.directive('attrCapture', function() {
+      return function(scope, element, $attrs) {
+        helper.attrs = $attrs;
+      };
+    });
+  });
+
+  inject(function($compile, $rootScope, $sniffer) {
+
+    helper.compileInput = function(inputHtml, mockValidity, scope) {
+
+      scope = helper.scope = scope || $rootScope;
+
+      // Create the input element and dealoc when done
+      helper.inputElm = jqLite(inputHtml);
+
+      // Set up mock validation if necessary
+      if (isObject(mockValidity)) {
+        VALIDITY_STATE_PROPERTY = 'ngMockValidity';
+        helper.inputElm.prop(VALIDITY_STATE_PROPERTY, mockValidity);
+        currentSpec.after(function() {
+          VALIDITY_STATE_PROPERTY = 'validity';
+        });
+      }
+
+      // Create the form element and dealoc when done
+      helper.formElm = jqLite('<form name="form"></form>');
+      helper.formElm.append(helper.inputElm);
+
+      // Compile the lot and return the input element
+      $compile(helper.formElm)(scope);
+
+      spyOn(scope.form, '$addControl').andCallThrough();
+      spyOn(scope.form, '$$renameControl').andCallThrough();
+
+      scope.$digest();
+
+      return helper.inputElm;
+    };
+
+    helper.changeInputValueTo = function(value) {
+      helper.inputElm.val(value);
+      browserTrigger(helper.inputElm, $sniffer.hasEvent('input') ? 'input' : 'change');
+    };
+
+    helper.changeGivenInputTo = function(inputElm, value) {
+      inputElm.val(value);
+      browserTrigger(inputElm, $sniffer.hasEvent('input') ? 'input' : 'change');
+    };
+
+    helper.dealoc = function() {
+      dealoc(helper.inputElm);
+      dealoc(helper.formElm);
+    };
+  });
+
+  return helper;
+}

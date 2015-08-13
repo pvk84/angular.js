@@ -3,7 +3,7 @@
 /**
  * @ngdoc directive
  * @name ngTransclude
- * @restrict AC
+ * @restrict EAC
  *
  * @description
  * Directive that marks the insertion point for the transcluded DOM of the nearest parent directive that uses transclusion.
@@ -13,15 +13,10 @@
  * @element ANY
  *
  * @example
-   <example module="transclude">
+   <example module="transcludeExample">
      <file name="index.html">
        <script>
-         function Ctrl($scope) {
-           $scope.title = 'Lorem Ipsum';
-           $scope.text = 'Neque porro quisquam est qui dolorem ipsum quia dolor...';
-         }
-
-         angular.module('transclude', [])
+         angular.module('transcludeExample', [])
           .directive('pane', function(){
              return {
                restrict: 'E',
@@ -29,14 +24,18 @@
                scope: { title:'@' },
                template: '<div style="border: 1px solid black;">' +
                            '<div style="background-color: gray">{{title}}</div>' +
-                           '<div ng-transclude></div>' +
+                           '<ng-transclude></ng-transclude>' +
                          '</div>'
              };
-         });
+         })
+         .controller('ExampleController', ['$scope', function($scope) {
+           $scope.title = 'Lorem Ipsum';
+           $scope.text = 'Neque porro quisquam est qui dolorem ipsum quia dolor...';
+         }]);
        </script>
-       <div ng-controller="Ctrl">
-         <input ng-model="title"><br>
-         <textarea ng-model="text"></textarea> <br/>
+       <div ng-controller="ExampleController">
+         <input ng-model="title" aria-label="title"> <br/>
+         <textarea ng-model="text" aria-label="text"></textarea> <br/>
          <pane title="{{title}}">{{text}}</pane>
        </div>
      </file>
@@ -56,6 +55,7 @@
  *
  */
 var ngTranscludeDirective = ngDirective({
+  restrict: 'EAC',
   link: function($scope, $element, $attrs, controller, $transclude) {
     if (!$transclude) {
       throw minErr('ngTransclude')('orphan',

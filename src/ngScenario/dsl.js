@@ -163,7 +163,7 @@ angular.scenario.dsl('expect', function() {
  */
 angular.scenario.dsl('using', function() {
   return function(selector, label) {
-    this.selector = _jQuery.trim((this.selector||'') + ' ' + selector);
+    this.selector = _jQuery.trim((this.selector || '') + ' ' + selector);
     if (angular.isString(label) && label.length) {
       this.label = label + ' ( ' + this.selector + ' )';
     } else {
@@ -199,7 +199,7 @@ angular.scenario.dsl('binding', function() {
  */
 angular.scenario.dsl('input', function() {
   var chain = {};
-  var supportInputEvent =  'oninput' in document.createElement('div') && msie != 9;
+  var supportInputEvent = 'oninput' in document.createElement('div') && !(msie && msie <= 11);
 
   chain.enter = function(value, event) {
     return this.addFutureAction("input '" + this.name + "' enter '" + value + "'",
@@ -276,8 +276,9 @@ angular.scenario.dsl('repeater', function() {
     return this.addFutureAction("repeater '" + this.label + "' row '" + index + "'",
       function($window, $document, done) {
         var matches = $document.elements().slice(index, index + 1);
-        if (!matches.length)
+        if (!matches.length) {
           return done('row ' + index + ' out of bounds');
+        }
         done(null, matches.bindings($window.angular.element));
     });
   };
@@ -304,7 +305,7 @@ angular.scenario.dsl('select', function() {
         if (option.length) {
           select.val(value);
         } else {
-          option = select.find('option').filter(function(){
+          option = select.find('option').filter(function() {
             return _jQuery(this).text() === value;
           });
           if (!option.length) {
@@ -377,7 +378,7 @@ angular.scenario.dsl('element', function() {
         var href = elements.attr('href');
         var eventProcessDefault = elements.trigger('click')[0];
 
-        if (href && elements[0].nodeName.toUpperCase() === 'A' && eventProcessDefault) {
+        if (href && elements[0].nodeName.toLowerCase() === 'a' && eventProcessDefault) {
           this.application.navigateTo(href, function() {
             done();
           }, done);
@@ -394,7 +395,7 @@ angular.scenario.dsl('element', function() {
         var href = elements.attr('href');
         var eventProcessDefault = elements.trigger('dblclick')[0];
 
-        if (href && elements[0].nodeName.toUpperCase() === 'A' && eventProcessDefault) {
+        if (href && elements[0].nodeName.toLowerCase() === 'a' && eventProcessDefault) {
           this.application.navigateTo(href, function() {
             done();
           }, done);

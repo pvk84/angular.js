@@ -2,12 +2,6 @@
 
 describe('SCE', function() {
 
-  // Work around an IE8 bug.  Though window.inject === angular.mock.inject, if it's invoked the
-  // window scope, IE8 loses the exception object that bubbles up and replaces it with a TypeError.
-  // By using a local alias, it gets invoked on the global scope instead of window.
-  // Ref: https://github.com/angular/angular.js/pull/4221#/issuecomment-25515813
-  var inject = angular.mock.inject;
-
   describe('when disabled', function() {
     beforeEach(function() {
       module(function($sceProvider) {
@@ -26,13 +20,21 @@ describe('SCE', function() {
     }));
   });
 
-  describe('IE8 quirks mode', function() {
+  describe('IE<11 quirks mode', function() {
+    /* global msie: true */
+    var msieBackup;
+
+    beforeEach(function() {
+      msieBackup = msie;
+    });
+
+    afterEach(function() {
+      msie = msieBackup;
+    });
+
     function runTest(enabled, documentMode, expectException) {
+      msie = documentMode;
       module(function($provide) {
-        $provide.value('$sniffer', {
-          msie: documentMode,
-          msieDocumentMode: documentMode
-        });
         $provide.value('$sceDelegate', {trustAs: null, valueOf: null, getTrusted: null});
       });
 
@@ -47,7 +49,7 @@ describe('SCE', function() {
         if (expectException) {
           expect(constructSce).toThrowMinErr(
             '$sce', 'iequirks', 'Strict Contextual Escaping does not support Internet Explorer ' +
-              'version < 9 in quirks mode.  You can fix this by adding the text <!doctype html> to ' +
+              'version < 11 in quirks mode.  You can fix this by adding the text <!doctype html> to ' +
               'the top of your HTML document.  See http://docs.angularjs.org/api/ng.$sce for more ' +
               'information.');
         } else {
@@ -152,7 +154,7 @@ describe('SCE', function() {
     it('should NOT unwrap values when the type is different', inject(function($sce) {
       var originalValue = "originalValue";
       var wrappedValue = $sce.trustAs($sce.HTML, originalValue);
-      expect(function () { $sce.getTrusted($sce.CSS, wrappedValue); }).toThrowMinErr(
+      expect(function() { $sce.getTrusted($sce.CSS, wrappedValue); }).toThrowMinErr(
           '$sce', 'unsafe', 'Attempting to use an unsafe value in a safe context.');
     }));
 
@@ -209,14 +211,30 @@ describe('SCE', function() {
       expect($sce.parseAsJs('"string"')()).toBe("string");
     }));
 
-    it('should be possible to do one-time binding', inject(function($sce, $rootScope) {
-      var exprFn = $sce.parseAsHtml('::foo');
-      expect(exprFn($rootScope, {'foo': $sce.trustAs($sce.HTML, 'trustedValue')})).toBe('trustedValue');
-      expect(exprFn($rootScope, {'foo': $sce.trustAs($sce.HTML, 'anotherTrustedValue')})).toBe('anotherTrustedValue');
-      $rootScope.$digest();
-      expect(exprFn($rootScope, {'foo': $sce.trustAs($sce.HTML, 'somethingElse')})).toBe('anotherTrustedValue');
-      expect(exprFn.$$unwatch).toBe(true);
-    }));
+    it('should be possible to do one-time binding', function() {
+      module(provideLog);
+      inject(function($sce, $rootScope, log) {
+        $rootScope.$watch($sce.parseAsHtml('::foo'), function(value) {
+          log(value + '');
+        });
+
+        $rootScope.$digest();
+        expect(log).toEqual('undefined'); // initial listener call
+        log.reset();
+
+        $rootScope.foo = $sce.trustAs($sce.HTML, 'trustedValue');
+        expect($rootScope.$$watchers.length).toBe(1);
+        $rootScope.$digest();
+
+        expect($rootScope.$$watchers.length).toBe(0);
+        expect(log).toEqual('trustedValue');
+        log.reset();
+
+        $rootScope.foo = $sce.trustAs($sce.HTML, 'anotherTrustedValue');
+        $rootScope.$digest();
+        expect(log).toEqual(''); // watcher no longer active
+      });
+    });
 
     it('should NOT parse constant non-literals', inject(function($sce) {
       // Until there's a real world use case for this, we're disallowing

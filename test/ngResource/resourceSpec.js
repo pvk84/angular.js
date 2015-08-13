@@ -5,7 +5,7 @@ describe("resource", function() {
 
   beforeEach(module('ngResource'));
 
-  beforeEach(module(function ($resourceProvider) {
+  beforeEach(module(function($resourceProvider) {
     resourceProvider = $resourceProvider;
   }));
 
@@ -44,6 +44,7 @@ describe("resource", function() {
       expect(isValidDottedPath('1abc')).toBe(false);
       expect(isValidDottedPath('.')).toBe(false);
       expect(isValidDottedPath('$')).toBe(true);
+      expect(isValidDottedPath('@')).toBe(true);
       expect(isValidDottedPath('a')).toBe(true);
       expect(isValidDottedPath('A')).toBe(true);
       expect(isValidDottedPath('a1')).toBe(true);
@@ -53,12 +54,14 @@ describe("resource", function() {
       expect(isValidDottedPath('$.$')).toBe(true);
       expect(isValidDottedPath('.$')).toBe(false);
       expect(isValidDottedPath('$.')).toBe(false);
+      expect(isValidDottedPath('@.')).toBe(false);
+      expect(isValidDottedPath('.@')).toBe(false);
     });
   });
 
   describe('lookupDottedPath', function() {
     /* global lookupDottedPath: false */
-    var data = {a: {b: 'foo', c: null}};
+    var data = {a: {b: 'foo', c: null, '@d':'d-foo'},'@b':'b-foo'};
 
     it('should throw for invalid path', function() {
       expect(function() {
@@ -68,9 +71,11 @@ describe("resource", function() {
     });
 
     it('should get dotted paths', function() {
-      expect(lookupDottedPath(data, 'a')).toEqual({b: 'foo', c: null});
+      expect(lookupDottedPath(data, 'a')).toEqual({b: 'foo', c: null, '@d':'d-foo'});
       expect(lookupDottedPath(data, 'a.b')).toBe('foo');
       expect(lookupDottedPath(data, 'a.c')).toBeNull();
+      expect(lookupDottedPath(data, 'a.@d')).toBe('d-foo');
+      expect(lookupDottedPath(data, '@b')).toBe('b-foo');
     });
 
     it('should skip over null/undefined members', function() {
@@ -305,16 +310,16 @@ describe("resource", function() {
   });
 
 
-  it('should allow relative paths in resource url', function () {
+  it('should allow relative paths in resource url', function() {
     var R = $resource(':relativePath');
     $httpBackend.expect('GET', 'data.json').respond('{}');
     R.get({ relativePath: 'data.json' });
   });
 
-  it('should handle + in url params', function () {
+  it('should handle + in url params', function() {
     var R = $resource('/api/myapp/:myresource?from=:from&to=:to&histlen=:histlen');
     $httpBackend.expect('GET', '/api/myapp/pear+apple?from=2012-04-01&to=2012-04-29&histlen=3').respond('{}');
-    R.get({ myresource: 'pear+apple', from : '2012-04-01', to : '2012-04-29', histlen : 3  });
+    R.get({ myresource: 'pear+apple', from: '2012-04-01', to: '2012-04-29', histlen: 3  });
   });
 
 
@@ -658,13 +663,15 @@ describe("resource", function() {
     var cc = CreditCard.get({id: 123});
     $httpBackend.flush();
 
+    cc.$myProp = 'still here';
+
     expect(cc.$promise).toBeDefined();
     expect(cc.$resolved).toBe(true);
 
     var json = JSON.parse(angular.toJson(cc));
     expect(json.$promise).not.toBeDefined();
     expect(json.$resolved).not.toBeDefined();
-    expect(json).toEqual({id: 123, number: '9876'});
+    expect(json).toEqual({id: 123, number: '9876', $myProp: 'still here'});
   });
 
   describe('promise api', function() {
@@ -839,7 +846,7 @@ describe("resource", function() {
       it('should pass the same transformed value to success callbacks and to promises', function() {
         $httpBackend.expect('GET', '/CreditCard').respond(200, { value: 'original' });
 
-        var transformResponse = function (response) {
+        var transformResponse = function(response) {
           return { value: 'transformed' };
         };
 
@@ -855,10 +862,10 @@ describe("resource", function() {
 
         var cc = new CreditCard({ name: 'Me' });
 
-        var req = cc.$call({}, function (result) {
+        var req = cc.$call({}, function(result) {
           successValue = result;
         });
-        req.then(function (result) {
+        req.then(function(result) {
           promiseValue = result;
         });
 
@@ -1076,7 +1083,7 @@ describe("resource", function() {
         expect(user).toEqualData([{id: 1, name: 'user1'}]);
       });
 
-      it('should not require it if not provided', function(){
+      it('should not require it if not provided', function() {
         $httpBackend.expect('GET', '/users.json').respond([{id: 1, name: 'user1'}]);
         var UserService = $resource('/users.json');
         var user = UserService.query();
@@ -1100,7 +1107,7 @@ describe("resource", function() {
         expect(user).toEqualData([{id: 1, name: 'user1'}]);
       });
 
-      it('should work with the action is overriden', function(){
+      it('should work with the action is overriden', function() {
         $httpBackend.expect('GET', '/users.json').respond([{id: 1, name: 'user1'}]);
         var UserService = $resource('/users/:user_id', {user_id: '@id'}, {
           query: {
@@ -1111,11 +1118,32 @@ describe("resource", function() {
         });
         var user = UserService.query();
         $httpBackend.flush();
-        expect(user).toEqualData([ {id: 1, name: 'user1'} ]);
+        expect(user).toEqualData([{id: 1, name: 'user1'}]);
+      });
+
+      it('should not convert string literals in array into Resource objects', function() {
+        $httpBackend.expect('GET', '/names.json').respond(["mary", "jane"]);
+        var strings = $resource('/names.json').query();
+        $httpBackend.flush();
+        expect(strings).toEqualData(["mary", "jane"]);
+      });
+
+      it('should not convert number literals in array into Resource objects', function() {
+        $httpBackend.expect('GET', '/names.json').respond([213, 456]);
+        var numbers = $resource('/names.json').query();
+        $httpBackend.flush();
+        expect(numbers).toEqualData([213, 456]);
+      });
+
+      it('should not convert boolean literals in array into Resource objects', function() {
+        $httpBackend.expect('GET', '/names.json').respond([true, false]);
+        var bools = $resource('/names.json').query();
+        $httpBackend.flush();
+        expect(bools).toEqualData([true, false]);
       });
     });
 
-    describe('get', function(){
+    describe('get', function() {
       it('should add them to the id', function() {
         $httpBackend.expect('GET', '/users/1.json').respond({id: 1, name: 'user1'});
         var UserService = $resource('/users/:user_id.json', {user_id: '@id'});
@@ -1140,7 +1168,7 @@ describe("resource", function() {
         expect(user).toEqualData({id: 1, name: 'user1'});
       });
 
-      it('should work with the action is overriden', function(){
+      it('should work with the action is overriden', function() {
         $httpBackend.expect('GET', '/users/1.json').respond({id: 1, name: 'user1'});
         var UserService = $resource('/users/:user_id', {user_id: '@id'}, {
           get: {
@@ -1299,7 +1327,7 @@ describe('resource', function() {
     expect(successSpy).not.toHaveBeenCalled();
     expect(failureSpy).toHaveBeenCalled();
     expect(failureSpy.mostRecentCall.args[0]).toMatch(
-        /^\[\$resource:badcfg\] Error in resource configuration\. Expected response to contain an array but got an object/
+        /^\[\$resource:badcfg\] Error in resource configuration for action `query`\. Expected response to contain an array but got an object \(Request: GET \/Customer\/123\)/
       );
   });
 
@@ -1316,7 +1344,7 @@ describe('resource', function() {
     expect(successSpy).not.toHaveBeenCalled();
     expect(failureSpy).toHaveBeenCalled();
     expect(failureSpy.mostRecentCall.args[0]).toMatch(
-        /^\[\$resource:badcfg\] Error in resource configuration. Expected response to contain an object but got an array/
+        /^\[\$resource:badcfg\] Error in resource configuration for action `get`\. Expected response to contain an object but got an array \(Request: GET \/Customer\/123\)/
       );
   });
 

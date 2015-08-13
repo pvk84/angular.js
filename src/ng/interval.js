@@ -2,8 +2,8 @@
 
 
 function $IntervalProvider() {
-  this.$get = ['$rootScope', '$window', '$q',
-       function($rootScope,   $window,   $q) {
+  this.$get = ['$rootScope', '$window', '$q', '$$q',
+       function($rootScope,   $window,   $q,   $$q) {
     var intervals = {};
 
 
@@ -39,58 +39,60 @@ function $IntervalProvider() {
       *   indefinitely.
       * @param {boolean=} [invokeApply=true] If set to `false` skips model dirty checking, otherwise
       *   will invoke `fn` within the {@link ng.$rootScope.Scope#$apply $apply} block.
+      * @param {...*=} Pass additional parameters to the executed function.
       * @returns {promise} A promise which will be notified on each iteration.
       *
       * @example
-      * <example module="time">
-      *   <file name="index.html">
-      *     <script>
-      *       function Ctrl2($scope,$interval) {
-      *         $scope.format = 'M/d/yy h:mm:ss a';
-      *         $scope.blood_1 = 100;
-      *         $scope.blood_2 = 120;
-      *
-      *         var stop;
-      *         $scope.fight = function() {
-      *           // Don't start a new fight if we are already fighting
-      *           if ( angular.isDefined(stop) ) return;
-      *
-      *           stop = $interval(function() {
-      *             if ($scope.blood_1 > 0 && $scope.blood_2 > 0) {
-      *                 $scope.blood_1 = $scope.blood_1 - 3;
-      *                 $scope.blood_2 = $scope.blood_2 - 4;
-      *             } else {
-      *                 $scope.stopFight();
-      *             }
-      *           }, 100);
-      *         };
-      *
-      *         $scope.stopFight = function() {
-      *           if (angular.isDefined(stop)) {
-      *             $interval.cancel(stop);
-      *             stop = undefined;
-      *           }
-      *         };
-      *
-      *         $scope.resetFight = function() {
+      * <example module="intervalExample">
+      * <file name="index.html">
+      *   <script>
+      *     angular.module('intervalExample', [])
+      *       .controller('ExampleController', ['$scope', '$interval',
+      *         function($scope, $interval) {
+      *           $scope.format = 'M/d/yy h:mm:ss a';
       *           $scope.blood_1 = 100;
       *           $scope.blood_2 = 120;
-      *         }
       *
-      *         $scope.$on('$destroy', function() {
-      *           // Make sure that the interval is destroyed too
-      *           $scope.stopFight();
-      *         });
-      *       }
+      *           var stop;
+      *           $scope.fight = function() {
+      *             // Don't start a new fight if we are already fighting
+      *             if ( angular.isDefined(stop) ) return;
       *
-      *       angular.module('time', [])
-      *         // Register the 'myCurrentTime' directive factory method.
-      *         // We inject $interval and dateFilter service since the factory method is DI.
-      *         .directive('myCurrentTime', function($interval, dateFilter) {
+      *             stop = $interval(function() {
+      *               if ($scope.blood_1 > 0 && $scope.blood_2 > 0) {
+      *                 $scope.blood_1 = $scope.blood_1 - 3;
+      *                 $scope.blood_2 = $scope.blood_2 - 4;
+      *               } else {
+      *                 $scope.stopFight();
+      *               }
+      *             }, 100);
+      *           };
+      *
+      *           $scope.stopFight = function() {
+      *             if (angular.isDefined(stop)) {
+      *               $interval.cancel(stop);
+      *               stop = undefined;
+      *             }
+      *           };
+      *
+      *           $scope.resetFight = function() {
+      *             $scope.blood_1 = 100;
+      *             $scope.blood_2 = 120;
+      *           };
+      *
+      *           $scope.$on('$destroy', function() {
+      *             // Make sure that the interval is destroyed too
+      *             $scope.stopFight();
+      *           });
+      *         }])
+      *       // Register the 'myCurrentTime' directive factory method.
+      *       // We inject $interval and dateFilter service since the factory method is DI.
+      *       .directive('myCurrentTime', ['$interval', 'dateFilter',
+      *         function($interval, dateFilter) {
       *           // return the directive link function. (compile function not needed)
       *           return function(scope, element, attrs) {
       *             var format,  // date format
-      *             stopTime; // so that we can cancel the time updates
+      *                 stopTime; // so that we can cancel the time updates
       *
       *             // used to update the UI
       *             function updateTime() {
@@ -106,41 +108,45 @@ function $IntervalProvider() {
       *             stopTime = $interval(updateTime, 1000);
       *
       *             // listen on DOM destroy (removal) event, and cancel the next UI update
-      *             // to prevent updating time ofter the DOM element was removed.
+      *             // to prevent updating time after the DOM element was removed.
       *             element.on('$destroy', function() {
       *               $interval.cancel(stopTime);
       *             });
       *           }
-      *         });
-      *     </script>
+      *         }]);
+      *   </script>
       *
-      *     <div>
-      *       <div ng-controller="Ctrl2">
-      *         Date format: <input ng-model="format"> <hr/>
-      *         Current time is: <span my-current-time="format"></span>
-      *         <hr/>
-      *         Blood 1 : <font color='red'>{{blood_1}}</font>
-      *         Blood 2 : <font color='red'>{{blood_2}}</font>
-      *         <button type="button" data-ng-click="fight()">Fight</button>
-      *         <button type="button" data-ng-click="stopFight()">StopFight</button>
-      *         <button type="button" data-ng-click="resetFight()">resetFight</button>
-      *       </div>
+      *   <div>
+      *     <div ng-controller="ExampleController">
+      *       <label>Date format: <input ng-model="format"></label> <hr/>
+      *       Current time is: <span my-current-time="format"></span>
+      *       <hr/>
+      *       Blood 1 : <font color='red'>{{blood_1}}</font>
+      *       Blood 2 : <font color='red'>{{blood_2}}</font>
+      *       <button type="button" data-ng-click="fight()">Fight</button>
+      *       <button type="button" data-ng-click="stopFight()">StopFight</button>
+      *       <button type="button" data-ng-click="resetFight()">resetFight</button>
       *     </div>
+      *   </div>
       *
-      *   </file>
+      * </file>
       * </example>
       */
     function interval(fn, delay, count, invokeApply) {
-      var setInterval = $window.setInterval,
+      var hasParams = arguments.length > 4,
+          args = hasParams ? sliceArgs(arguments, 4) : [],
+          setInterval = $window.setInterval,
           clearInterval = $window.clearInterval,
-          deferred = $q.defer(),
-          promise = deferred.promise,
           iteration = 0,
-          skipApply = (isDefined(invokeApply) && !invokeApply);
+          skipApply = (isDefined(invokeApply) && !invokeApply),
+          deferred = (skipApply ? $$q : $q).defer(),
+          promise = deferred.promise;
 
       count = isDefined(count) ? count : 0;
 
-      promise.then(null, null, fn);
+      promise.then(null, null, (!hasParams) ? fn : function() {
+        fn.apply(null, args);
+      });
 
       promise.$$intervalId = setInterval(function tick() {
         deferred.notify(iteration++);
@@ -168,13 +174,13 @@ function $IntervalProvider() {
       * @description
       * Cancels a task associated with the `promise`.
       *
-      * @param {promise} promise returned by the `$interval` function.
+      * @param {Promise=} promise returned by the `$interval` function.
       * @returns {boolean} Returns `true` if the task was successfully canceled.
       */
     interval.cancel = function(promise) {
       if (promise && promise.$$intervalId in intervals) {
         intervals[promise.$$intervalId].reject('canceled');
-        clearInterval(promise.$$intervalId);
+        $window.clearInterval(promise.$$intervalId);
         delete intervals[promise.$$intervalId];
         return true;
       }

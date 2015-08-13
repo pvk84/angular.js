@@ -7,7 +7,6 @@ describe('$interpolate', function() {
     var interpolateFn = $interpolate('some text');
 
     expect(interpolateFn.exp).toBe('some text');
-    expect(interpolateFn.separators).toEqual(['some text']);
     expect(interpolateFn.expressions).toEqual([]);
 
     expect(interpolateFn({})).toBe('some text');
@@ -41,7 +40,6 @@ describe('$interpolate', function() {
     var interpolateFn = $interpolate('Hello {{name}}!');
 
     expect(interpolateFn.exp).toBe('Hello {{name}}!');
-    expect(interpolateFn.separators).toEqual(['Hello ', '!']);
     expect(interpolateFn.expressions).toEqual(['name']);
 
     var scope = $rootScope.$new();
@@ -60,6 +58,96 @@ describe('$interpolate', function() {
     expect($interpolate("Hello, world!{{bloop}}")()).toBe("Hello, world!");
   }));
 
+  describe('watching', function() {
+    it('should be watchable with any input types', inject(function($interpolate, $rootScope) {
+      var lastVal;
+      $rootScope.$watch($interpolate('{{i}}'), function(val) {
+        lastVal = val;
+      });
+      $rootScope.$apply();
+      expect(lastVal).toBe('');
+
+      $rootScope.i = null;
+      $rootScope.$apply();
+      expect(lastVal).toBe('');
+
+      $rootScope.i = '';
+      $rootScope.$apply();
+      expect(lastVal).toBe('');
+
+      $rootScope.i = 0;
+      $rootScope.$apply();
+      expect(lastVal).toBe('0');
+
+      $rootScope.i = [0];
+      $rootScope.$apply();
+      expect(lastVal).toBe('[0]');
+
+      $rootScope.i = {a: 1, b: 2};
+      $rootScope.$apply();
+      expect(lastVal).toBe('{"a":1,"b":2}');
+    }));
+
+    it('should be watchable with literal values', inject(function($interpolate, $rootScope) {
+      var lastVal;
+      $rootScope.$watch($interpolate('{{1}}{{"2"}}{{true}}{{[false]}}{{ {a: 2} }}'), function(val) {
+        lastVal = val;
+      });
+      $rootScope.$apply();
+      expect(lastVal).toBe('12true[false]{"a":2}');
+
+      expect($rootScope.$countWatchers()).toBe(0);
+    }));
+
+    it('should respect one-time bindings for each individual expression', inject(function($interpolate, $rootScope) {
+      var calls = [];
+      $rootScope.$watch($interpolate('{{::a | limitTo:1}} {{::s}} {{::i | number}}'), function(val) {
+        calls.push(val);
+      });
+
+      $rootScope.$apply();
+      expect(calls.length).toBe(1);
+
+      $rootScope.a = [1];
+      $rootScope.$apply();
+      expect(calls.length).toBe(2);
+      expect(calls[1]).toBe('[1]  ');
+
+      $rootScope.a = [0];
+      $rootScope.$apply();
+      expect(calls.length).toBe(2);
+
+      $rootScope.i = $rootScope.a = 123;
+      $rootScope.s = 'str!';
+      $rootScope.$apply();
+      expect(calls.length).toBe(3);
+      expect(calls[2]).toBe('[1] str! 123');
+
+      expect($rootScope.$countWatchers()).toBe(0);
+    }));
+
+    it('should stop watching strings with no expressions after first execution',
+      inject(function($interpolate, $rootScope) {
+        var spy = jasmine.createSpy();
+        $rootScope.$watch($interpolate('foo'), spy);
+        $rootScope.$digest();
+        expect($rootScope.$countWatchers()).toBe(0);
+        expect(spy).toHaveBeenCalledWith('foo', 'foo', $rootScope);
+        expect(spy.calls.length).toBe(1);
+      })
+    );
+
+    it('should stop watching strings with only constant expressions after first execution',
+      inject(function($interpolate, $rootScope) {
+        var spy = jasmine.createSpy();
+        $rootScope.$watch($interpolate('foo {{42}}'), spy);
+        $rootScope.$digest();
+        expect($rootScope.$countWatchers()).toBe(0);
+        expect(spy).toHaveBeenCalledWith('foo 42', 'foo 42', $rootScope);
+        expect(spy.calls.length).toBe(1);
+      })
+    );
+  });
 
   describe('interpolation escaping', function() {
     var obj;
@@ -185,7 +273,6 @@ describe('$interpolate', function() {
     }));
 
     it('should not get confused with same markers', inject(function($interpolate) {
-      expect($interpolate('---').separators).toEqual(['---']);
       expect($interpolate('---').expressions).toEqual([]);
       expect($interpolate('----')({})).toEqual('');
       expect($interpolate('--1--')({})).toEqual('1');
@@ -194,67 +281,58 @@ describe('$interpolate', function() {
 
   describe('parseBindings', function() {
     it('should Parse Text With No Bindings', inject(function($interpolate) {
-      expect($interpolate("a").separators).toEqual(['a']);
       expect($interpolate("a").expressions).toEqual([]);
     }));
 
     it('should Parse Empty Text', inject(function($interpolate) {
-      expect($interpolate("").separators).toEqual(['']);
       expect($interpolate("").expressions).toEqual([]);
     }));
 
     it('should Parse Inner Binding', inject(function($interpolate) {
       var interpolateFn = $interpolate("a{{b}}C"),
-          separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['a', 'C']);
+          expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['b']);
       expect(interpolateFn({b: 123})).toEqual('a123C');
     }));
 
     it('should Parse Ending Binding', inject(function($interpolate) {
       var interpolateFn = $interpolate("a{{b}}"),
-        separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['a', '']);
+        expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['b']);
       expect(interpolateFn({b: 123})).toEqual('a123');
     }));
 
     it('should Parse Begging Binding', inject(function($interpolate) {
       var interpolateFn = $interpolate("{{b}}c"),
-        separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['', 'c']);
+        expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['b']);
       expect(interpolateFn({b: 123})).toEqual('123c');
     }));
 
     it('should Parse Loan Binding', inject(function($interpolate) {
       var interpolateFn = $interpolate("{{b}}"),
-        separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['', '']);
+        expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['b']);
       expect(interpolateFn({b: 123})).toEqual('123');
     }));
 
     it('should Parse Two Bindings', inject(function($interpolate) {
       var interpolateFn = $interpolate("{{b}}{{c}}"),
-        separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['', '', '']);
+        expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['b', 'c']);
       expect(interpolateFn({b: 111, c: 222})).toEqual('111222');
     }));
 
     it('should Parse Two Bindings With Text In Middle', inject(function($interpolate) {
       var interpolateFn = $interpolate("{{b}}x{{c}}"),
-        separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['', 'x', '']);
+        expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['b', 'c']);
       expect(interpolateFn({b: 111, c: 222})).toEqual('111x222');
     }));
 
     it('should Parse Multiline', inject(function($interpolate) {
       var interpolateFn = $interpolate('"X\nY{{A\n+B}}C\nD"'),
-        separators = interpolateFn.separators, expressions = interpolateFn.expressions;
-      expect(separators).toEqual(['"X\nY', 'C\nD"']);
+        expressions = interpolateFn.expressions;
       expect(expressions).toEqual(['A\n+B']);
       expect(interpolateFn({'A': 'aa', 'B': 'bb'})).toEqual('"X\nYaabbC\nD"');
     }));
@@ -317,7 +395,6 @@ describe('$interpolate', function() {
       });
 
       inject(function($interpolate) {
-        expect($interpolate('---').separators).toEqual(['---']);
         expect($interpolate('---').expressions).toEqual([]);
         expect($interpolate('----')({})).toEqual('');
         expect($interpolate('--1--')({})).toEqual('1');

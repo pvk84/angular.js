@@ -7,13 +7,14 @@
  * @kind function
  *
  * @description
- * Creates an injector function that can be used for retrieving services as well as for
+ * Creates an injector object that can be used for retrieving services as well as for
  * dependency injection (see {@link guide/di dependency injection}).
  *
-
  * @param {Array.<string|Function>} modules A list of module functions or their aliases. See
- *        {@link angular.module}. The `ng` module must be explicitly added.
- * @returns {function()} Injector function. See {@link auto.$injector $injector}.
+ *     {@link angular.module}. The `ng` module must be explicitly added.
+ * @param {boolean=} [strictDi=false] Whether the injector should be in strict mode, which
+ *     disallows argument name annotation inference.
+ * @returns {injector} Injector object. See {@link auto.$injector $injector}.
  *
  * @example
  * Typical usage
@@ -23,7 +24,7 @@
  *
  *   // use the injector to kick off your application
  *   // use the type inference to auto inject arguments, or use implicit injection
- *   $injector.invoke(function($rootScope, $compile, $document){
+ *   $injector.invoke(function($rootScope, $compile, $document) {
  *     $compile($document)($rootScope);
  *     $rootScope.$digest();
  *   });
@@ -61,7 +62,7 @@
  * Implicit module which gets automatically added to each {@link auto.$injector $injector}.
  */
 
-var FN_ARGS = /^function\s*[^\(]*\(\s*([^\)]*)\)/m;
+var FN_ARGS = /^[^\(]*\(\s*([^\)]*)\)/m;
 var FN_ARG_SPLIT = /,/;
 var FN_ARG = /^\s*(_?)(\S+?)\1\s*$/;
 var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
@@ -84,7 +85,7 @@ function annotate(fn, strictDi, name) {
       argDecl,
       last;
 
-  if (typeof fn == 'function') {
+  if (typeof fn === 'function') {
     if (!($inject = fn.$inject)) {
       $inject = [];
       if (fn.length) {
@@ -97,8 +98,8 @@ function annotate(fn, strictDi, name) {
         }
         fnText = fn.toString().replace(STRIP_COMMENTS, '');
         argDecl = fnText.match(FN_ARGS);
-        forEach(argDecl[1].split(FN_ARG_SPLIT), function(arg){
-          arg.replace(FN_ARG, function(all, underscore, name){
+        forEach(argDecl[1].split(FN_ARG_SPLIT), function(arg) {
+          arg.replace(FN_ARG, function(all, underscore, name) {
             $inject.push(name);
           });
         });
@@ -120,7 +121,6 @@ function annotate(fn, strictDi, name) {
 /**
  * @ngdoc service
  * @name $injector
- * @kind function
  *
  * @description
  *
@@ -133,9 +133,9 @@ function annotate(fn, strictDi, name) {
  * ```js
  *   var $injector = angular.injector();
  *   expect($injector.get('$injector')).toBe($injector);
- *   expect($injector.invoke(function($injector){
+ *   expect($injector.invoke(function($injector) {
  *     return $injector;
- *   }).toBe($injector);
+ *   })).toBe($injector);
  * ```
  *
  * # Injection Function Annotation
@@ -159,8 +159,10 @@ function annotate(fn, strictDi, name) {
  * ## Inference
  *
  * In JavaScript calling `toString()` on a function returns the function definition. The definition
- * can then be parsed and the function arguments can be extracted. *NOTE:* This does not work with
- * minification, and obfuscation tools since these tools change the argument names.
+ * can then be parsed and the function arguments can be extracted. This method of discovering
+ * annotations is disallowed when the injector is in strict mode.
+ * *NOTE:* This does not work with minification, and obfuscation tools since these tools change the
+ * argument names.
  *
  * ## `$inject` Annotation
  * By adding an `$inject` property onto a function the injection parameters can be specified.
@@ -177,6 +179,7 @@ function annotate(fn, strictDi, name) {
  * Return an instance of the service.
  *
  * @param {string} name The name of the instance to retrieve.
+ * @param {string=} caller An optional string to provide the origin of the function call for error messages.
  * @return {*} The instance.
  */
 
@@ -187,8 +190,8 @@ function annotate(fn, strictDi, name) {
  * @description
  * Invoke the method and supply the method arguments from the `$injector`.
  *
- * @param {!Function} fn The function to invoke. Function parameters are injected according to the
- *   {@link guide/di $inject Annotation} rules.
+ * @param {Function|Array.<string|Function>} fn The injectable function to invoke. Function parameters are
+ *   injected according to the {@link guide/di $inject Annotation} rules.
  * @param {Object=} self The `this` for the invoked method.
  * @param {Object=} locals Optional object. If preset then any argument names are read from this
  *                         object first, before the `$injector` is consulted.
@@ -202,8 +205,8 @@ function annotate(fn, strictDi, name) {
  * @description
  * Allows the user to query if the particular service exists.
  *
- * @param {string} Name of the service to query.
- * @returns {boolean} returns true if injector has given service.
+ * @param {string} name Name of the service to query.
+ * @returns {boolean} `true` if injector has given service.
  */
 
 /**
@@ -244,6 +247,8 @@ function annotate(fn, strictDi, name) {
  *   // Then
  *   expect(injector.annotate(MyController)).toEqual(['$scope', '$route']);
  * ```
+ *
+ * You can disallow this method by using strict injection mode.
  *
  * This method does not work with code minification / obfuscation. For this reason the following
  * annotation strategies are supported.
@@ -297,6 +302,8 @@ function annotate(fn, strictDi, name) {
  * @param {Function|Array.<string|Function>} fn Function for which dependent service names need to
  * be retrieved as described above.
  *
+ * @param {boolean=} [strictDi=false] Disallow argument name annotation inference.
+ *
  * @returns {Array.<string>} The names of the services which the function requires.
  */
 
@@ -304,7 +311,7 @@ function annotate(fn, strictDi, name) {
 
 
 /**
- * @ngdoc object
+ * @ngdoc service
  * @name $provide
  *
  * @description
@@ -451,8 +458,8 @@ function annotate(fn, strictDi, name) {
  * configure your service in a provider.
  *
  * @param {string} name The name of the instance.
- * @param {function()} $getFn The $getFn for the instance creation. Internally this is a short hand
- *                            for `$provide.provider(name, {$get: $getFn})`.
+ * @param {Function|Array.<string|Function>} $getFn The injectable $getFn for the instance creation.
+ *                      Internally this is a short hand for `$provide.provider(name, {$get: $getFn})`.
  * @returns {Object} registered provider instance
  *
  * @example
@@ -487,7 +494,8 @@ function annotate(fn, strictDi, name) {
  * as a type/class.
  *
  * @param {string} name The name of the instance.
- * @param {Function} constructor A class (constructor function) that will be instantiated.
+ * @param {Function|Array.<string|Function>} constructor An injectable class (constructor function)
+ *     that will be instantiated.
  * @returns {Object} registered provider instance
  *
  * @example
@@ -586,7 +594,7 @@ function annotate(fn, strictDi, name) {
  * object which replaces or wraps and delegates to the original service.
  *
  * @param {string} name The name of the service to decorate.
- * @param {function()} decorator This function will be invoked when the service needs to be
+ * @param {Function|Array.<string|Function>} decorator This function will be invoked when the service needs to be
  *    instantiated and should return the decorated service instance. The function is called using
  *    the {@link auto.$injector#invoke injector.invoke} method and is therefore fully injectable.
  *    Local injection arguments:
@@ -611,7 +619,7 @@ function createInjector(modulesToLoad, strictDi) {
   var INSTANTIATING = {},
       providerSuffix = 'Provider',
       path = [],
-      loadedModules = new HashMap(),
+      loadedModules = new HashMap([], true),
       providerCache = {
         $provide: {
             provider: supportObject(provider),
@@ -623,18 +631,21 @@ function createInjector(modulesToLoad, strictDi) {
           }
       },
       providerInjector = (providerCache.$injector =
-          createInternalInjector(providerCache, function() {
+          createInternalInjector(providerCache, function(serviceName, caller) {
+            if (angular.isString(caller)) {
+              path.push(caller);
+            }
             throw $injectorMinErr('unpr', "Unknown provider: {0}", path.join(' <- '));
-          }, strictDi)),
+          })),
       instanceCache = {},
       instanceInjector = (instanceCache.$injector =
-          createInternalInjector(instanceCache, function(servicename) {
-            var provider = providerInjector.get(servicename + providerSuffix);
-            return instanceInjector.invoke(provider.$get, provider, undefined, servicename);
-          }, strictDi));
+          createInternalInjector(instanceCache, function(serviceName, caller) {
+            var provider = providerInjector.get(serviceName + providerSuffix, caller);
+            return instanceInjector.invoke(provider.$get, provider, undefined, serviceName);
+          }));
 
 
-  forEach(loadModules(modulesToLoad), function(fn) { instanceInjector.invoke(fn || noop); });
+  forEach(loadModules(modulesToLoad), function(fn) { if (fn) instanceInjector.invoke(fn); });
 
   return instanceInjector;
 
@@ -663,7 +674,21 @@ function createInjector(modulesToLoad, strictDi) {
     return providerCache[name + providerSuffix] = provider_;
   }
 
-  function factory(name, factoryFn) { return provider(name, { $get: factoryFn }); }
+  function enforceReturnValue(name, factory) {
+    return function enforcedReturnValue() {
+      var result = instanceInjector.invoke(factory, this);
+      if (isUndefined(result)) {
+        throw $injectorMinErr('undef', "Provider '{0}' must return a value from $get factory method.", name);
+      }
+      return result;
+    };
+  }
+
+  function factory(name, factoryFn, enforce) {
+    return provider(name, {
+      $get: enforce !== false ? enforceReturnValue(name, factoryFn) : factoryFn
+    });
+  }
 
   function service(name, constructor) {
     return factory(name, ['$injector', function($injector) {
@@ -671,7 +696,7 @@ function createInjector(modulesToLoad, strictDi) {
     }]);
   }
 
-  function value(name, val) { return factory(name, valueFn(val)); }
+  function value(name, val) { return factory(name, valueFn(val), false); }
 
   function constant(name, value) {
     assertNotHasOwnProperty(name, 'constant');
@@ -692,15 +717,16 @@ function createInjector(modulesToLoad, strictDi) {
   ////////////////////////////////////
   // Module Loading
   ////////////////////////////////////
-  function loadModules(modulesToLoad){
-    var runBlocks = [], moduleFn, invokeQueue;
+  function loadModules(modulesToLoad) {
+    assertArg(isUndefined(modulesToLoad) || isArray(modulesToLoad), 'modulesToLoad', 'not an array');
+    var runBlocks = [], moduleFn;
     forEach(modulesToLoad, function(module) {
       if (loadedModules.get(module)) return;
       loadedModules.put(module, true);
 
       function runInvokeQueue(queue) {
         var i, ii;
-        for(i = 0, ii = queue.length; i < ii; i++) {
+        for (i = 0, ii = queue.length; i < ii; i++) {
           var invokeArgs = queue[i],
               provider = providerInjector.get(invokeArgs[0]);
 
@@ -746,17 +772,18 @@ function createInjector(modulesToLoad, strictDi) {
 
   function createInternalInjector(cache, factory) {
 
-    function getService(serviceName) {
+    function getService(serviceName, caller) {
       if (cache.hasOwnProperty(serviceName)) {
         if (cache[serviceName] === INSTANTIATING) {
-          throw $injectorMinErr('cdep', 'Circular dependency found: {0}', path.join(' <- '));
+          throw $injectorMinErr('cdep', 'Circular dependency found: {0}',
+                    serviceName + ' <- ' + path.join(' <- '));
         }
         return cache[serviceName];
       } else {
         try {
           path.unshift(serviceName);
           cache[serviceName] = INSTANTIATING;
-          return cache[serviceName] = factory(serviceName);
+          return cache[serviceName] = factory(serviceName, caller);
         } catch (err) {
           if (cache[serviceName] === INSTANTIATING) {
             delete cache[serviceName];
@@ -768,18 +795,18 @@ function createInjector(modulesToLoad, strictDi) {
       }
     }
 
-    function invoke(fn, self, locals, serviceName){
+    function invoke(fn, self, locals, serviceName) {
       if (typeof locals === 'string') {
         serviceName = locals;
         locals = null;
       }
 
       var args = [],
-          $inject = annotate(fn, strictDi, serviceName),
+          $inject = createInjector.$$annotate(fn, strictDi, serviceName),
           length, i,
           key;
 
-      for(i = 0, length = $inject.length; i < length; i++) {
+      for (i = 0, length = $inject.length; i < length; i++) {
         key = $inject[i];
         if (typeof key !== 'string') {
           throw $injectorMinErr('itkn',
@@ -788,11 +815,10 @@ function createInjector(modulesToLoad, strictDi) {
         args.push(
           locals && locals.hasOwnProperty(key)
           ? locals[key]
-          : getService(key)
+          : getService(key, serviceName)
         );
       }
-      if (!fn.$inject) {
-        // this means that we must be an array.
+      if (isArray(fn)) {
         fn = fn[length];
       }
 
@@ -802,14 +828,11 @@ function createInjector(modulesToLoad, strictDi) {
     }
 
     function instantiate(Type, locals, serviceName) {
-      var Constructor = function() {},
-          instance, returnedValue;
-
       // Check if Type is annotated and use just the given function at n-1 as parameter
       // e.g. someModule.factory('greeter', ['$window', function(renamed$window) {}]);
-      Constructor.prototype = (isArray(Type) ? Type[Type.length - 1] : Type).prototype;
-      instance = new Constructor();
-      returnedValue = invoke(Type, instance, locals, serviceName);
+      // Object creation: http://jsperf.com/create-constructor/2
+      var instance = Object.create((isArray(Type) ? Type[Type.length - 1] : Type).prototype || null);
+      var returnedValue = invoke(Type, instance, locals, serviceName);
 
       return isObject(returnedValue) || isFunction(returnedValue) ? returnedValue : instance;
     }
@@ -818,7 +841,7 @@ function createInjector(modulesToLoad, strictDi) {
       invoke: invoke,
       instantiate: instantiate,
       get: getService,
-      annotate: annotate,
+      annotate: createInjector.$$annotate,
       has: function(name) {
         return providerCache.hasOwnProperty(name + providerSuffix) || cache.hasOwnProperty(name);
       }

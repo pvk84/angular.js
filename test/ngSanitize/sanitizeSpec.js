@@ -6,7 +6,7 @@ describe('HTML', function() {
 
   beforeEach(module('ngSanitize'));
   beforeEach(function() {
-    expectHTML = function(html){
+    expectHTML = function(html) {
       var sanitize;
       inject(function($sanitize) {
         sanitize = $sanitize;
@@ -21,8 +21,9 @@ describe('HTML', function() {
 
     var handler, start, text, comment;
     beforeEach(function() {
+      text = "";
       handler = {
-        start: function(tag, attrs, unary){
+        start: function(tag, attrs, unary) {
           start = {
             tag: tag,
             attrs: attrs,
@@ -34,8 +35,8 @@ describe('HTML', function() {
             attrs[key] = value.replace(/^\s*/, '').replace(/\s*$/, '');
           });
         },
-        chars: function(text_){
-          text = text_;
+        chars: function(text_) {
+          text += text_;
         },
         end:function(tag) {
           expect(tag).toEqual(start.tag);
@@ -81,8 +82,31 @@ describe('HTML', function() {
       expect(text).toEqual('text');
     });
 
+    it('should not treat "<" followed by a non-/ or non-letter as a tag', function() {
+      expectHTML('<- text1 text2 <1 text1 text2 <{', handler).
+        toBe('&lt;- text1 text2 &lt;1 text1 text2 &lt;{');
+    });
+
+    it('should throw badparse if text content contains "<" followed by "/" without matching ">"', function() {
+      expect(function() {
+        htmlParser('foo </ bar', handler);
+      }).toThrowMinErr('$sanitize', 'badparse', 'The sanitizer was unable to parse the following block of html: </ bar');
+    });
+
+    it('should throw badparse if text content contains "<" followed by an ASCII letter without matching ">"', function() {
+      expect(function() {
+        htmlParser('foo <a bar', handler);
+      }).toThrowMinErr('$sanitize', 'badparse', 'The sanitizer was unable to parse the following block of html: <a bar');
+    });
+
+    it('should accept tag delimiters such as "<" inside real tags', function() {
+      // Assert that the < is part of the text node content, and not part of a tag name.
+      htmlParser('<p> 10 < 100 </p>', handler);
+      expect(text).toEqual(' 10 < 100 ');
+    });
+
     it('should parse newlines in tags', function() {
-      htmlParser('<\ntag\n attr="value"\n>text<\n/\ntag\n>', handler);
+      htmlParser('<tag\n attr="value"\n>text</\ntag\n>', handler);
       expect(start).toEqual({tag:'tag', attrs:{attr:'value'}, unary:false});
       expect(text).toEqual('text');
     });
@@ -116,6 +140,10 @@ describe('HTML', function() {
     expectHTML('a<SCRIPT>evil< / scrIpt >c.').toEqual('ac.');
   });
 
+  it('should remove script that has newline characters', function() {
+    expectHTML('a<SCRIPT\n>\n\revil\n\r< / scrIpt\n >c.').toEqual('ac.');
+  });
+
   it('should remove DOCTYPE header', function() {
     expectHTML('<!DOCTYPE html>').toEqual('');
     expectHTML('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"\n"http://www.w3.org/TR/html4/strict.dtd">').toEqual('');
@@ -123,8 +151,9 @@ describe('HTML', function() {
     expectHTML('a<!DocTyPe html>c.').toEqual('ac.');
   });
 
-  it('should remove nested script', function() {
-    expectHTML('a< SCRIPT >A< SCRIPT >evil< / scrIpt >B< / scrIpt >c.').toEqual('ac.');
+  it('should escape non-start tags', function() {
+    expectHTML('a< SCRIPT >A< SCRIPT >evil< / scrIpt >B< / scrIpt >c.').
+      toBe('a&lt; SCRIPT &gt;A&lt; SCRIPT &gt;evil&lt; / scrIpt &gt;B&lt; / scrIpt &gt;c.');
   });
 
   it('should remove attrs', function() {
@@ -133,6 +162,10 @@ describe('HTML', function() {
 
   it('should remove style', function() {
     expectHTML('a<STyle>evil</stYle>c.').toEqual('ac.');
+  });
+
+  it('should remove style that has newline characters', function() {
+    expectHTML('a<STyle \n>\n\revil\n\r</stYle\n>c.').toEqual('ac.');
   });
 
   it('should remove script and style', function() {
@@ -165,14 +198,16 @@ describe('HTML', function() {
     expectHTML(everything).toEqual(everything);
   });
 
-  it('should handle improper html', function() {
+  it('should mangle improper html', function() {
+    // This text is encoded more than a real HTML parser would, but it should render the same.
     expectHTML('< div rel="</div>" alt=abc dir=\'"\' >text< /div>').
-      toEqual('<div rel="&lt;/div&gt;" alt="abc" dir="&#34;">text</div>');
+      toBe('&lt; div rel=&#34;&#34; alt=abc dir=\'&#34;\' &gt;text&lt; /div&gt;');
   });
 
-  it('should handle improper html2', function() {
+  it('should mangle improper html2', function() {
+    // A proper HTML parser would clobber this more in most cases, but it looks reasonable.
     expectHTML('< div rel="</div>" / >').
-      toEqual('<div rel="&lt;/div&gt;"/>');
+      toBe('&lt; div rel=&#34;&#34; / &gt;');
   });
 
   it('should ignore back slash as escape', function() {
@@ -195,6 +230,58 @@ describe('HTML', function() {
     expectHTML('\na\n').toEqual('&#10;a&#10;');
   });
 
+  it('should accept tag delimiters such as "<" inside real tags (with nesting)', function() {
+    //this is an integrated version of the 'should accept tag delimiters such as "<" inside real tags' test
+    expectHTML('<p> 10 < <span>100</span> </p>')
+    .toEqual('<p> 10 &lt; <span>100</span> </p>');
+  });
+
+  it('should accept non-string arguments', function() {
+    expectHTML(null).toBe('');
+    expectHTML(undefined).toBe('');
+    expectHTML(42).toBe('42');
+    expectHTML({}).toBe('[object Object]');
+    expectHTML([1, 2, 3]).toBe('1,2,3');
+    expectHTML(true).toBe('true');
+    expectHTML(false).toBe('false');
+  });
+
+  it('should accept SVG tags', function() {
+    expectHTML('<svg width="400px" height="150px" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/></svg>')
+        .toEqual('<svg width="400px" height="150px" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/></svg>');
+  });
+
+  it('should not ignore white-listed svg camelCased attributes', function() {
+    expectHTML('<svg preserveAspectRatio="true"></svg>')
+        .toEqual('<svg preserveAspectRatio="true"></svg>');
+
+  });
+
+  it('should sanitize SVG xlink:href attribute values', function() {
+    expectHTML('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="javascript:alert()"></a></svg>')
+        .toEqual('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a></a></svg>');
+
+    expectHTML('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="https://example.com"></a></svg>')
+        .toEqual('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="https://example.com"></a></svg>');
+  });
+
+  it('should sanitize unknown namespaced SVG attributes', function() {
+    expectHTML('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:foo="javascript:alert()"></a></svg>')
+      .toEqual('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a></a></svg>');
+
+    expectHTML('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:bar="https://example.com"></a></svg>')
+      .toEqual('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a></a></svg>');
+  });
+
+  it('should not accept SVG animation tags', function() {
+    expectHTML('<svg xmlns:xlink="http://www.w3.org/1999/xlink"><a><text y="1em">Click me</text><animate attributeName="xlink:href" values="javascript:alert(1)"/></a></svg>')
+      .toEqual('<svg xmlns:xlink="http://www.w3.org/1999/xlink"><a><text y="1em">Click me</text></a></svg>');
+
+    expectHTML('<svg><a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="?"><circle r="400"></circle>' +
+    '<animate attributeName="xlink:href" begin="0" from="javascript:alert(1)" to="&" /></a></svg>')
+      .toEqual('<svg><a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="?"><circle r="400"></circle></a></svg>');
+  });
+
   describe('htmlSanitizerWriter', function() {
     /* global htmlSanitizeWriter: false */
     if (angular.isUndefined(window.htmlSanitizeWriter)) return;
@@ -203,7 +290,7 @@ describe('HTML', function() {
     beforeEach(function() {
       html = '';
       uriValidator = jasmine.createSpy('uriValidator');
-      writer = htmlSanitizeWriter({push:function(text){html+=text;}}, uriValidator);
+      writer = htmlSanitizeWriter({push:function(text) {html+=text;}}, uriValidator);
     });
 
     it('should write basic HTML', function() {
@@ -310,7 +397,7 @@ describe('HTML', function() {
           inject(function($sanitize) {
             sanitize = $sanitize;
           });
-          var input = '<a href="'+this.actual+'"></a>';
+          var input = '<a href="' + this.actual + '"></a>';
           return sanitize(input) === input;
         },
         toBeValidImageSrc: function() {
@@ -318,7 +405,7 @@ describe('HTML', function() {
           inject(function($sanitize) {
             sanitize = $sanitize;
           });
-          var input = '<img src="'+this.actual+'"/>';
+          var input = '<img src="' + this.actual + '"/>';
           return sanitize(input) === input;
         }
       });
@@ -423,14 +510,13 @@ describe('HTML', function() {
 });
 
 describe('decodeEntities', function() {
-  var handler, text,
-      origHiddenPre = window.hiddenPre;
+  var handler, text;
 
   beforeEach(function() {
     text = '';
     handler = {
       start: function() {},
-      chars: function(text_){
+      chars: function(text_) {
         text = text_;
       },
       end: function() {},
@@ -439,37 +525,13 @@ describe('decodeEntities', function() {
     module('ngSanitize');
   });
 
-  afterEach(function() {
-    window.hiddenPre = origHiddenPre;
+  it('should unescape text', function() {
+    htmlParser('a&lt;div&gt;&amp;&lt;/div&gt;c', handler);
+    expect(text).toEqual('a<div>&</div>c');
   });
 
-  it('should use innerText if textContent is not available (IE<9)', function() {
-    window.hiddenPre = {
-      innerText: 'INNER_TEXT'
-    };
-    inject(function($sanitize) {
-      htmlParser('<tag>text</tag>', handler);
-      expect(text).toEqual('INNER_TEXT');
-    });
-  });
-  it('should use textContent if available', function() {
-    window.hiddenPre = {
-      textContent: 'TEXT_CONTENT',
-      innerText: 'INNER_TEXT'
-    };
-    inject(function($sanitize) {
-      htmlParser('<tag>text</tag>', handler);
-      expect(text).toEqual('TEXT_CONTENT');
-    });
-  });
-  it('should use textContent even if empty', function() {
-    window.hiddenPre = {
-      textContent: '',
-      innerText: 'INNER_TEXT'
-    };
-    inject(function($sanitize) {
-      htmlParser('<tag>text</tag>', handler);
-      expect(text).toEqual('');
-    });
+  it('should preserve whitespace', function() {
+    htmlParser('  a&amp;b ', handler);
+    expect(text).toEqual('  a&b ');
   });
 });

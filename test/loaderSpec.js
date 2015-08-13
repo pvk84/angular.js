@@ -3,7 +3,7 @@
 describe('module loader', function() {
   var window;
 
-  beforeEach(function () {
+  beforeEach(function() {
     window = {};
     setupModuleLoader(window);
   });
@@ -32,6 +32,7 @@ describe('module loader', function() {
     var myModule = window.angular.module('my', ['other'], 'config');
 
     expect(myModule.
+      decorator('dk', 'dv').
       provider('sk', 'sv').
       factory('fk', 'fv').
       service('a', 'aa').
@@ -45,18 +46,19 @@ describe('module loader', function() {
 
     expect(myModule.requires).toEqual(['other']);
     expect(myModule._invokeQueue).toEqual([
-      ['$provide', 'constant', ['abc', 123] ],
-      ['$provide', 'provider', ['sk', 'sv'] ],
-      ['$provide', 'factory', ['fk', 'fv'] ],
-      ['$provide', 'service', ['a', 'aa'] ],
-      ['$provide', 'value', ['k', 'v'] ],
-      ['$filterProvider', 'register', ['f', 'ff'] ],
-      ['$compileProvider', 'directive', ['d', 'dd'] ],
-      ['$controllerProvider', 'register', ['ctrl', 'ccc']],
+      ['$provide', 'constant', ['abc', 123]],
+      ['$provide', 'decorator', ['dk', 'dv']],
+      ['$provide', 'provider', ['sk', 'sv']],
+      ['$provide', 'factory', ['fk', 'fv']],
+      ['$provide', 'service', ['a', 'aa']],
+      ['$provide', 'value', ['k', 'v']],
+      ['$filterProvider', 'register', ['f', 'ff']],
+      ['$compileProvider', 'directive', ['d', 'dd']],
+      ['$controllerProvider', 'register', ['ctrl', 'ccc']]
     ]);
     expect(myModule._configBlocks).toEqual([
-      ['$injector', 'invoke', ['config'] ],
-      ['$injector', 'invoke', ['init2'] ]
+      ['$injector', 'invoke', ['config']],
+      ['$injector', 'invoke', ['init2']]
     ]);
     expect(myModule._runBlocks).toEqual(['runBlock']);
   });

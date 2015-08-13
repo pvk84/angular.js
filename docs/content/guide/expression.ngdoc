@@ -1,5 +1,6 @@
 @ngdoc overview
 @name  Expressions
+@sortOrder 270
 @description
 
 # Angular Expressions
@@ -25,8 +26,16 @@ Angular expressions are like JavaScript expressions with the following differenc
   * **Forgiving:** In JavaScript, trying to evaluate undefined properties generates `ReferenceError`
     or `TypeError`. In Angular, expression evaluation is forgiving to `undefined` and `null`.
 
-  * **No Control Flow Statements:** you cannot use the following in an Angular expression:
+  * **No Control Flow Statements:** You cannot use the following in an Angular expression:
     conditionals, loops, or exceptions.
+
+  * **No Function Declarations:** You cannot declare functions in an Angular expression,
+    even inside `ng-init` directive.
+
+  * **No RegExp Creation With Literal Notation:** You cannot create regular expressions
+    in an Angular expression.
+
+  * **No Comma And Void Operators:** You cannot use `,` or `void` in an Angular expression.
 
   * **Filters:** You can use {@link guide/filter filters} within expressions to format data before
     displaying it.
@@ -38,7 +47,9 @@ the method from your view. If you want to `eval()` an Angular expression yoursel
 ## Example
 <example>
   <file name="index.html">
-    1+2={{1+2}}
+    <span>
+      1+2={{1+2}}
+    </span>
   </file>
 
   <file name="protractor.js" type="protractor">
@@ -50,39 +61,40 @@ the method from your view. If you want to `eval()` an Angular expression yoursel
 
 You can try evaluating different expressions here:
 
-<example>
+<example module="expressionExample">
   <file name="index.html">
-    <div ng-controller="Cntl2" class="expressions">
+    <div ng-controller="ExampleController" class="expressions">
       Expression:
       <input type='text' ng-model="expr" size="80"/>
       <button ng-click="addExp(expr)">Evaluate</button>
       <ul>
        <li ng-repeat="expr in exprs track by $index">
          [ <a href="" ng-click="removeExp($index)">X</a> ]
-         <tt>{{expr}}</tt> => <span ng-bind="$parent.$eval(expr)"></span>
+         <code>{{expr}}</code> => <span ng-bind="$parent.$eval(expr)"></span>
         </li>
       </ul>
     </div>
   </file>
 
   <file name="script.js">
-    function Cntl2($scope) {
-      var exprs = $scope.exprs = [];
-      $scope.expr = '3*10|currency';
-      $scope.addExp = function(expr) {
-        exprs.push(expr);
-      };
+    angular.module('expressionExample', [])
+      .controller('ExampleController', ['$scope', function($scope) {
+        var exprs = $scope.exprs = [];
+        $scope.expr = '3*10|currency';
+        $scope.addExp = function(expr) {
+          exprs.push(expr);
+        };
 
-      $scope.removeExp = function(index) {
-        exprs.splice(index, 1);
-      };
-    }
+        $scope.removeExp = function(index) {
+          exprs.splice(index, 1);
+        };
+      }]);
   </file>
 
   <file name="protractor.js" type="protractor">
     it('should allow user expression testing', function() {
       element(by.css('.expressions button')).click();
-      var lis = element(by.css('.expressions ul')).element.all(by.repeater('expr in exprs'));
+      var lis = element(by.css('.expressions ul')).all(by.repeater('expr in exprs'));
       expect(lis.count()).toBe(1);
       expect(lis.get(0).getText()).toEqual('[ X ] 3*10|currency => $30.00');
     });
@@ -101,9 +113,9 @@ This restriction is intentional. It prevents accidental access to the global sta
 Instead use services like `$window` and `$location` in functions called from expressions. Such services
 provide mockable access to globals.
 
-<example>
+<example module="expressionExample">
   <file name="index.html">
-    <div class="example2" ng-controller="Cntl1">
+    <div class="example2" ng-controller="ExampleController">
       Name: <input ng-model="name" type="text"/>
       <button ng-click="greet()">Greet</button>
       <button ng-click="window.alert('Should not see me')">Won't greet</button>
@@ -111,13 +123,14 @@ provide mockable access to globals.
   </file>
 
   <file name="script.js">
-    function Cntl1($window, $scope){
-      $scope.name = 'World';
+    angular.module('expressionExample', [])
+      .controller('ExampleController', ['$window', '$scope', function($window, $scope) {
+        $scope.name = 'World';
 
-      $scope.greet = function() {
-        $window.alert('Hello ' + $scope.name);
-      };
-    }
+        $scope.greet = function() {
+          $window.alert('Hello ' + $scope.name);
+        };
+      }]);
   </file>
 
   <file name="protractor.js" type="protractor">
@@ -127,6 +140,9 @@ provide mockable access to globals.
         return;
       }
       element(by.css('[ng-click="greet()"]')).click();
+
+      // We need to give the browser time to display the alert
+      browser.wait(protractor.ExpectedConditions.alertIsPresent(), 1000);
 
       var alertDialog = browser.switchTo().alert();
 
@@ -159,10 +175,18 @@ expression. The reason behind this is core to the Angular philosophy that applic
 be in controllers, not the views. If you need a real conditional, loop, or to throw from a view
 expression, delegate to a JavaScript method instead.
 
+## No function declarations or RegExp creation with literal notation
+
+You can't declare functions or create regular expressions from within AngularJS expressions. This is
+to avoid complex model transformation logic inside templates. Such logic is better placed in a
+controller or in a dedicated filter where it can be tested properly.
+
 ## `$event`
 
 Directives like {@link ng.directive:ngClick `ngClick`} and {@link ng.directive:ngFocus `ngFocus`}
-expose a `$event` object within the scope of that expression.
+expose a `$event` object within the scope of that expression. The object is an instance of a [jQuery
+Event Object](http://api.jquery.com/category/events/event-object/) when jQuery is present or a
+similar jqLite object.
 
 <example module="eventExampleApp">
   <file name="index.html">
@@ -271,28 +295,34 @@ digest cycle as long as that value is not undefined. If the value of the express
 within the digest loop and later, within the same digest loop, it is set to undefined,
 then the expression is not fulfilled and will remain watched.
 
-  1. Given an expression that starts with `::` when a digest loop is entered and expression
-     is dirty-checked store the value as V
-  2. If V is not undefined mark the result of the expression as stable and schedule a task
+  1. Given an expression that starts with `::`, when a digest loop is entered and expression
+     is dirty-checked, store the value as V
+  2. If V is not undefined, mark the result of the expression as stable and schedule a task
      to deregister the watch for this expression when we exit the digest loop
   3. Process the digest loop as normal
-  4. When digest loop is done and all the values have settled process the queue of watch
-     deregistration tasks. For each watch to be deregistered check if it still evaluates
-     to value that is not `undefined`. If that's the case, deregister the watch. Otherwise
+  4. When digest loop is done and all the values have settled, process the queue of watch
+     deregistration tasks. For each watch to be deregistered, check if it still evaluates
+     to a value that is not `undefined`. If that's the case, deregister the watch. Otherwise,
      keep dirty-checking the watch in the future digest loops by following the same
      algorithm starting from step 1
 
+#### Special case for object literals
+
+Unlike simple values, object-literals are watched until every key is defined.
+See http://www.bennadel.com/blog/2760-one-time-data-bindings-for-object-literal-expressions-in-angularjs-1-3.htm
 
 ### How to benefit from one-time binding
 
-When interpolating text or attributes. If the expression, once set, will not change
-then it is a candidate for one-time expression.
+If the expression will not change once set, it is a candidate for one-time binding.
+Here are three example cases.
+
+When interpolating text or attributes:
 
 ```html
-  <div name="attr: {{::color}}">text: {{::name}}</div>
+  <div name="attr: {{::color}}">text: {{::name | uppercase}}</div>
 ```
 
-When using a directive with bidirectional binding and the parameters will not change
+When using a directive with bidirectional binding and parameters that will not change:
 
 ```js
 someModule.directive('someDirective', function() {
@@ -307,15 +337,14 @@ someModule.directive('someDirective', function() {
 ```
 
 ```html
-  <div some-directive name=“::myName” color=“My color is {{::myColor}}”></div>
+  <div some-directive name="::myName" color="My color is {{::myColor}}"></div>
 ```
 
 
-When using a directive that takes an expression
+When using a directive that takes an expression:
 
 ```html
 <ul>
-  <li ng-repeat="item in ::items">{{item.name}};</li>
+  <li ng-repeat="item in ::items | orderBy:'name'">{{item.name}};</li>
 </ul>
 ```
-

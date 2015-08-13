@@ -23,10 +23,17 @@
  *
  * @element ANY
  * @scope
- * @param {expression} ngController Name of a globally accessible constructor function or an
- *     {@link guide/expression expression} that on the current scope evaluates to a
- *     constructor function. The controller instance can be published into a scope property
- *     by specifying `as propertyName`.
+ * @priority 500
+ * @param {expression} ngController Name of a constructor function registered with the current
+ * {@link ng.$controllerProvider $controllerProvider} or an {@link guide/expression expression}
+ * that on the current scope evaluates to a constructor function.
+ *
+ * The controller instance can be published into a scope property by specifying
+ * `ng-controller="as propertyName"`.
+ *
+ * If the current `$controllerProvider` is configured to use globals (via
+ * {@link ng.$controllerProvider#allowGlobals `$controllerProvider.allowGlobals()` }), this may
+ * also be the name of a globally accessible constructor function (not recommended).
  *
  * @example
  * Here is a simple form for editing user contact information. Adding, removing, clearing, and
@@ -54,27 +61,30 @@
  *
  * This example demonstrates the `controller as` syntax.
  *
- * <example name="ngControllerAs">
+ * <example name="ngControllerAs" module="controllerAsExample">
  *   <file name="index.html">
  *    <div id="ctrl-as-exmpl" ng-controller="SettingsController1 as settings">
- *      Name: <input type="text" ng-model="settings.name"/>
- *      [ <a href="" ng-click="settings.greet()">greet</a> ]<br/>
+ *      <label>Name: <input type="text" ng-model="settings.name"/></label>
+ *      <button ng-click="settings.greet()">greet</button><br/>
  *      Contact:
  *      <ul>
  *        <li ng-repeat="contact in settings.contacts">
- *          <select ng-model="contact.type">
+ *          <select ng-model="contact.type" aria-label="Contact method" id="select_{{$index}}">
  *             <option>phone</option>
  *             <option>email</option>
  *          </select>
- *          <input type="text" ng-model="contact.value"/>
- *          [ <a href="" ng-click="settings.clearContact(contact)">clear</a>
- *          | <a href="" ng-click="settings.removeContact(contact)">X</a> ]
+ *          <input type="text" ng-model="contact.value" aria-labelledby="select_{{$index}}" />
+ *          <button ng-click="settings.clearContact(contact)">clear</button>
+ *          <button ng-click="settings.removeContact(contact)" aria-label="Remove">X</button>
  *        </li>
- *        <li>[ <a href="" ng-click="settings.addContact()">add</a> ]</li>
+ *        <li><button ng-click="settings.addContact()">add</button></li>
  *     </ul>
  *    </div>
  *   </file>
  *   <file name="app.js">
+ *    angular.module('controllerAsExample', [])
+ *      .controller('SettingsController1', SettingsController1);
+ *
  *    function SettingsController1() {
  *      this.name = "John Smith";
  *      this.contacts = [
@@ -103,29 +113,29 @@
  *   <file name="protractor.js" type="protractor">
  *     it('should check controller as', function() {
  *       var container = element(by.id('ctrl-as-exmpl'));
- *         expect(container.findElement(by.model('settings.name'))
+ *         expect(container.element(by.model('settings.name'))
  *           .getAttribute('value')).toBe('John Smith');
  *
  *       var firstRepeat =
- *           container.findElement(by.repeater('contact in settings.contacts').row(0));
+ *           container.element(by.repeater('contact in settings.contacts').row(0));
  *       var secondRepeat =
- *           container.findElement(by.repeater('contact in settings.contacts').row(1));
+ *           container.element(by.repeater('contact in settings.contacts').row(1));
  *
- *       expect(firstRepeat.findElement(by.model('contact.value')).getAttribute('value'))
+ *       expect(firstRepeat.element(by.model('contact.value')).getAttribute('value'))
  *           .toBe('408 555 1212');
  *
- *       expect(secondRepeat.findElement(by.model('contact.value')).getAttribute('value'))
+ *       expect(secondRepeat.element(by.model('contact.value')).getAttribute('value'))
  *           .toBe('john.smith@example.org');
  *
- *       firstRepeat.findElement(by.linkText('clear')).click();
+ *       firstRepeat.element(by.buttonText('clear')).click();
  *
- *       expect(firstRepeat.findElement(by.model('contact.value')).getAttribute('value'))
+ *       expect(firstRepeat.element(by.model('contact.value')).getAttribute('value'))
  *           .toBe('');
  *
- *       container.findElement(by.linkText('add')).click();
+ *       container.element(by.buttonText('add')).click();
  *
- *       expect(container.findElement(by.repeater('contact in settings.contacts').row(2))
- *           .findElement(by.model('contact.value'))
+ *       expect(container.element(by.repeater('contact in settings.contacts').row(2))
+ *           .element(by.model('contact.value'))
  *           .getAttribute('value'))
  *           .toBe('yourname@example.org');
  *     });
@@ -134,27 +144,30 @@
  *
  * This example demonstrates the "attach to `$scope`" style of controller.
  *
- * <example name="ngController">
+ * <example name="ngController" module="controllerExample">
  *  <file name="index.html">
  *   <div id="ctrl-exmpl" ng-controller="SettingsController2">
- *     Name: <input type="text" ng-model="name"/>
- *     [ <a href="" ng-click="greet()">greet</a> ]<br/>
+ *     <label>Name: <input type="text" ng-model="name"/></label>
+ *     <button ng-click="greet()">greet</button><br/>
  *     Contact:
  *     <ul>
  *       <li ng-repeat="contact in contacts">
- *         <select ng-model="contact.type">
+ *         <select ng-model="contact.type" id="select_{{$index}}">
  *            <option>phone</option>
  *            <option>email</option>
  *         </select>
- *         <input type="text" ng-model="contact.value"/>
- *         [ <a href="" ng-click="clearContact(contact)">clear</a>
- *         | <a href="" ng-click="removeContact(contact)">X</a> ]
+ *         <input type="text" ng-model="contact.value" aria-labelledby="select_{{$index}}" />
+ *         <button ng-click="clearContact(contact)">clear</button>
+ *         <button ng-click="removeContact(contact)">X</button>
  *       </li>
- *       <li>[ <a href="" ng-click="addContact()">add</a> ]</li>
+ *       <li>[ <button ng-click="addContact()">add</button> ]</li>
  *    </ul>
  *   </div>
  *  </file>
  *  <file name="app.js">
+ *   angular.module('controllerExample', [])
+ *     .controller('SettingsController2', ['$scope', SettingsController2]);
+ *
  *   function SettingsController2($scope) {
  *     $scope.name = "John Smith";
  *     $scope.contacts = [
@@ -184,28 +197,28 @@
  *    it('should check controller', function() {
  *      var container = element(by.id('ctrl-exmpl'));
  *
- *      expect(container.findElement(by.model('name'))
+ *      expect(container.element(by.model('name'))
  *          .getAttribute('value')).toBe('John Smith');
  *
  *      var firstRepeat =
- *          container.findElement(by.repeater('contact in contacts').row(0));
+ *          container.element(by.repeater('contact in contacts').row(0));
  *      var secondRepeat =
- *          container.findElement(by.repeater('contact in contacts').row(1));
+ *          container.element(by.repeater('contact in contacts').row(1));
  *
- *      expect(firstRepeat.findElement(by.model('contact.value')).getAttribute('value'))
+ *      expect(firstRepeat.element(by.model('contact.value')).getAttribute('value'))
  *          .toBe('408 555 1212');
- *      expect(secondRepeat.findElement(by.model('contact.value')).getAttribute('value'))
+ *      expect(secondRepeat.element(by.model('contact.value')).getAttribute('value'))
  *          .toBe('john.smith@example.org');
  *
- *      firstRepeat.findElement(by.linkText('clear')).click();
+ *      firstRepeat.element(by.buttonText('clear')).click();
  *
- *      expect(firstRepeat.findElement(by.model('contact.value')).getAttribute('value'))
+ *      expect(firstRepeat.element(by.model('contact.value')).getAttribute('value'))
  *          .toBe('');
  *
- *      container.findElement(by.linkText('add')).click();
+ *      container.element(by.buttonText('add')).click();
  *
- *      expect(container.findElement(by.repeater('contact in contacts').row(2))
- *          .findElement(by.model('contact.value'))
+ *      expect(container.element(by.repeater('contact in contacts').row(2))
+ *          .element(by.model('contact.value'))
  *          .getAttribute('value'))
  *          .toBe('yourname@example.org');
  *    });
@@ -215,6 +228,7 @@
  */
 var ngControllerDirective = [function() {
   return {
+    restrict: 'A',
     scope: true,
     controller: '@',
     priority: 500

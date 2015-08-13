@@ -1,32 +1,29 @@
+'use strict';
+
 var files = require('./angularFiles').files;
 var util = require('./lib/grunt/utils.js');
 var versionInfo = require('./lib/versions/version-info');
 var path = require('path');
+var e2e = require('./test/e2e/tools');
 
 module.exports = function(grunt) {
   //grunt plugins
   require('load-grunt-tasks')(grunt);
 
   grunt.loadTasks('lib/grunt');
+  grunt.loadNpmTasks('angular-benchpress');
 
   var NG_VERSION = versionInfo.currentVersion;
   NG_VERSION.cdn = versionInfo.cdnVersion;
   var dist = 'angular-'+ NG_VERSION.full;
 
-  //global beforeEach
-  util.init();
-
-
   //config
   grunt.initConfig({
     NG_VERSION: NG_VERSION,
-
-    parallel: {
-      travis: {
-        tasks: [
-          util.parallelTask(['test:unit', 'test:promises-aplus', 'tests:docs'], {stream: true}),
-          util.parallelTask(['test:e2e'])
-        ]
+    bp_build: {
+      options: {
+        buildPath: 'build/benchmarks',
+        benchmarksPath: 'benchmarks'
       }
     },
 
@@ -38,13 +35,14 @@ module.exports = function(grunt) {
           base: '.',
           keepalive: true,
           middleware: function(connect, options){
+            var base = Array.isArray(options.base) ? options.base[options.base.length - 1] : options.base;
             return [
-              //uncomment to enable CSP
-              // util.csp(),
+              util.conditionalCsp(),
               util.rewrite(),
+              e2e.middleware(),
               connect.favicon('images/favicon.ico'),
-              connect.static(options.base),
-              connect.directory(options.base)
+              connect.static(base),
+              connect.directory(base)
             ];
           }
         }
@@ -57,6 +55,7 @@ module.exports = function(grunt) {
           port: 8000,
           hostname: '0.0.0.0',
           middleware: function(connect, options){
+            var base = Array.isArray(options.base) ? options.base[options.base.length - 1] : options.base;
             return [
               function(req, resp, next) {
                 // cache get requests to speed up tests on travis
@@ -66,8 +65,10 @@ module.exports = function(grunt) {
 
                 next();
               },
+              util.conditionalCsp(),
+              e2e.middleware(),
               connect.favicon('images/favicon.ico'),
-              connect.static(options.base)
+              connect.static(base)
             ];
           }
         }
@@ -107,11 +108,14 @@ module.exports = function(grunt) {
       options: {
         jshintrc: true,
       },
+      node: {
+        files: { src: ['*.js', 'lib/**/*.js'] },
+      },
       tests: {
         files: { src: 'test/**/*.js' },
       },
       ng: {
-        files: { src: files['angularSrc'] },
+        files: { src: files['angularSrc'].concat('!src/angular.bind.js') },
       },
       ngAnimate: {
         files: { src: 'src/ngAnimate/**/*.js' },
@@ -121,6 +125,9 @@ module.exports = function(grunt) {
       },
       ngLocale: {
         files: { src: 'src/ngLocale/**/*.js' },
+      },
+      ngMessageFormat: {
+        files: { src: 'src/ngMessageFormat/**/*.js' },
       },
       ngMessages: {
         files: { src: 'src/ngMessages/**/*.js' },
@@ -142,13 +149,20 @@ module.exports = function(grunt) {
       },
       ngTouch: {
         files: { src: 'src/ngTouch/**/*.js' },
+      },
+      ngAria: {
+        files: {src: 'src/ngAria/**/*.js'},
       }
     },
 
     jscs: {
-      src: ['src/**/*.js', 'test/**/*.js'],
+      src: [
+        'src/**/*.js',
+        'test/**/*.js',
+        '!src/angular.bind.js' // we ignore this file since contains an early return statement
+      ],
       options: {
-        config: ".jscs.json"
+        config: ".jscsrc"
       }
     },
 
@@ -156,7 +170,7 @@ module.exports = function(grunt) {
       scenario: {
         dest: 'build/angular-scenario.js',
         src: [
-          'bower_components/jquery/jquery.js',
+          'bower_components/jquery/dist/jquery.js',
           util.wrap([files['angularSrc'], files['angularScenario']], 'ngScenario/angular')
         ],
         styles: {
@@ -193,6 +207,10 @@ module.exports = function(grunt) {
         dest: 'build/angular-resource.js',
         src: util.wrap(files['angularModules']['ngResource'], 'module')
       },
+      messageformat: {
+        dest: 'build/angular-message-format.js',
+        src: util.wrap(files['angularModules']['ngMessageFormat'], 'module')
+      },
       messages: {
         dest: 'build/angular-messages.js',
         src: util.wrap(files['angularModules']['ngMessages'], 'module')
@@ -209,6 +227,10 @@ module.exports = function(grunt) {
         dest: 'build/angular-cookies.js',
         src: util.wrap(files['angularModules']['ngCookies'], 'module')
       },
+      aria: {
+        dest: 'build/angular-aria.js',
+        src: util.wrap(files['angularModules']['ngAria'], 'module')
+      },
       "promises-aplus-adapter": {
         dest:'tmp/promises-aplus-adapter++.js',
         src:['src/ng/q.js','lib/promises-aplus/promises-aplus-test-adapter.js']
@@ -221,11 +243,13 @@ module.exports = function(grunt) {
       animate: 'build/angular-animate.js',
       cookies: 'build/angular-cookies.js',
       loader: 'build/angular-loader.js',
+      messageformat: 'build/angular-message-format.js',
       messages: 'build/angular-messages.js',
       touch: 'build/angular-touch.js',
       resource: 'build/angular-resource.js',
       route: 'build/angular-route.js',
-      sanitize: 'build/angular-sanitize.js'
+      sanitize: 'build/angular-sanitize.js',
+      aria: 'build/angular-aria.js'
     },
 
 
@@ -235,8 +259,19 @@ module.exports = function(grunt) {
         'test/**/*.js',
         '!test/ngScenario/DescribeSpec.js',
         '!src/ng/directive/attrs.js', // legitimate xit here
-        '!src/ngScenario/**/*.js'
-      ]
+        '!src/ngScenario/**/*.js',
+        '!test/helpers/privateMocks*.js'
+      ],
+      options: {
+        disallowed: [
+          'iit',
+          'xit',
+          'tthey',
+          'xthey',
+          'ddescribe',
+          'xdescribe'
+        ]
+      }
     },
 
     "merge-conflict": {
@@ -260,18 +295,26 @@ module.exports = function(grunt) {
     compress: {
       build: {
         options: {archive: 'build/' + dist +'.zip', mode: 'zip'},
-        src: ['**'], cwd: 'build', expand: true, dot: true, dest: dist + '/'
+        src: ['**'],
+        cwd: 'build',
+        expand: true,
+        dot: true,
+        dest: dist + '/'
       }
     },
 
-    shell:{
-      "promises-aplus-tests":{
-        options:{
-          //stdout:true,
-          stderr:true,
-          failOnError:true
+    shell: {
+      "npm-install": {
+        command: path.normalize('scripts/npm/install-dependencies.sh')
+      },
+
+      "promises-aplus-tests": {
+        options: {
+          stdout: false,
+          stderr: true,
+          failOnError: true
         },
-        command:path.normalize('./node_modules/.bin/promises-aplus-tests tmp/promises-aplus-adapter++.js')
+        command: path.normalize('./node_modules/.bin/promises-aplus-tests tmp/promises-aplus-adapter++.js')
       }
     },
 
@@ -291,14 +334,18 @@ module.exports = function(grunt) {
     }
   });
 
+  // global beforeEach task
+  if (!process.env.TRAVIS) {
+    grunt.task.run('shell:npm-install');
+  }
 
   //alias tasks
   grunt.registerTask('test', 'Run unit, docs and e2e tests with Karma', ['jshint', 'jscs', 'package','test:unit','test:promises-aplus', 'tests:docs', 'test:protractor']);
   grunt.registerTask('test:jqlite', 'Run the unit tests with Karma' , ['tests:jqlite']);
   grunt.registerTask('test:jquery', 'Run the jQuery unit tests with Karma', ['tests:jquery']);
-  grunt.registerTask('test:modules', 'Run the Karma module tests with Karma', ['tests:modules']);
+  grunt.registerTask('test:modules', 'Run the Karma module tests with Karma', ['build', 'tests:modules']);
   grunt.registerTask('test:docs', 'Run the doc-page tests with Karma', ['package', 'tests:docs']);
-  grunt.registerTask('test:unit', 'Run unit, jQuery and Karma module tests with Karma', ['tests:jqlite', 'tests:jquery', 'tests:modules']);
+  grunt.registerTask('test:unit', 'Run unit, jQuery and Karma module tests with Karma', ['test:jqlite', 'test:jquery', 'test:modules']);
   grunt.registerTask('test:protractor', 'Run the end to end tests with Protractor and keep a test server running in the background', ['webdriver', 'connect:testserver', 'protractor:normal']);
   grunt.registerTask('test:travis-protractor', 'Run the end to end tests with Protractor for Travis CI builds', ['connect:testserver', 'protractor:travis']);
   grunt.registerTask('test:ci-protractor', 'Run the end to end tests with Protractor for Jenkins CI builds', ['webdriver', 'connect:testserver', 'protractor:jenkins']);

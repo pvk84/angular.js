@@ -56,7 +56,7 @@ describe("angular.scenario.dsl", function() {
     jqLite($window.document).empty();
   }));
 
-  afterEach(function(){
+  afterEach(function() {
     jqLite($window.document).removeData('$injector');
   });
 
@@ -282,7 +282,7 @@ describe("angular.scenario.dsl", function() {
         expect($root.futureError).toMatch(/did not match/);
       });
 
-      it('should fail to select an option that does not exist', function(){
+      it('should fail to select an option that does not exist', function() {
         doc.append(
             '<select ng-model="test">' +
             '  <option value=A>one</option>' +
@@ -624,7 +624,7 @@ describe("angular.scenario.dsl", function() {
       });
 
       it('should match bindings by substring match', function() {
-        compile('<pre ng-bind="foo.bar | filter"></pre>', 'binding value');
+        compile('<pre ng-bind="foo.bar | lowercase"></pre>', 'binding value');
         $root.dsl.binding('foo . bar');
         expect($root.futureResult).toEqual('binding value');
       });

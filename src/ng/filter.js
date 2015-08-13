@@ -1,5 +1,16 @@
 'use strict';
 
+/* global currencyFilter: true,
+ dateFilter: true,
+ filterFilter: true,
+ jsonFilter: true,
+ limitToFilter: true,
+ lowercaseFilter: true,
+ numberFilter: true,
+ orderByFilter: true,
+ uppercaseFilter: true,
+ */
+
 /**
  * @ngdoc provider
  * @name $filterProvider
@@ -8,6 +19,13 @@
  * Filters are just functions which transform input to an output. However filters need to be
  * Dependency Injected. To achieve this a filter definition consists of a factory function which is
  * annotated with dependencies and is responsible for creating a filter function.
+ *
+ * <div class="alert alert-warning">
+ * **Note:** Filter names must be valid angular {@link expression} identifiers, such as `uppercase` or `orderBy`.
+ * Names with special characters, such as hyphens and dots, are not allowed. If you wish to namespace
+ * your filters, then you can use capitalization (`myappSubsectionFilterx`) or underscores
+ * (`myapp_subsection_filterx`).
+ * </div>
  *
  * ```js
  *   // Filter registration
@@ -49,16 +67,6 @@
  * For more information about how angular filters work, and how to create your own filters, see
  * {@link guide/filter Filters} in the Angular Developer Guide.
  */
-/**
- * @ngdoc method
- * @name $filterProvider#register
- * @description
- * Register filter factory function.
- *
- * @param {String} name Name of the filter.
- * @param {Function} fn The filter factory function which is injectable.
- */
-
 
 /**
  * @ngdoc service
@@ -97,14 +105,22 @@ function $FilterProvider($provide) {
 
   /**
    * @ngdoc method
-   * @name $controllerProvider#register
+   * @name $filterProvider#register
    * @param {string|Object} name Name of the filter function, or an object map of filters where
    *    the keys are the filter names and the values are the filter factories.
+   *
+   *    <div class="alert alert-warning">
+   *    **Note:** Filter names must be valid angular {@link expression} identifiers, such as `uppercase` or `orderBy`.
+   *    Names with special characters, such as hyphens and dots, are not allowed. If you wish to namespace
+   *    your filters, then you can use capitalization (`myappSubsectionFilterx`) or underscores
+   *    (`myapp_subsection_filterx`).
+   *    </div>
+    * @param {Function} factory If the first argument was a string, a factory function for the filter to be registered.
    * @returns {Object} Registered filter instance, or if a map of filters was provided then a map
    *    of the registered filter instances.
    */
   function register(name, factory) {
-    if(isObject(name)) {
+    if (isObject(name)) {
       var filters = {};
       forEach(name, function(filter, key) {
         filters[key] = register(key, filter);

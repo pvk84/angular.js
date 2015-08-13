@@ -54,6 +54,9 @@
  * <span ng-non-bindable>`{{personCount}}`</span>. The closed braces `{}` is a placeholder
  * for <span ng-non-bindable>{{numberExpression}}</span>.
  *
+ * If no rule is defined for a category, then an empty string is displayed and a warning is generated.
+ * Note that some locales define more categories than `one` and `other`. For example, fr-fr defines `few` and `many`.
+ *
  * # Configuring ngPluralize with offset
  * The `offset` attribute allows further customization of pluralized text, which can result in
  * a better user experience. For example, instead of the message "4 people are viewing this document",
@@ -76,7 +79,7 @@
  * When one person, perhaps John, views the document, "John is viewing" will be shown.
  * When three people view the document, no explicit number rule is found, so
  * an offset of 2 is taken off 3, and Angular uses 1 to decide the plural category.
- * In this case, plural category 'one' is matched and "John, Marry and one other person are viewing"
+ * In this case, plural category 'one' is matched and "John, Mary and one other person are viewing"
  * is shown.
  *
  * Note that when you specify offsets, you must provide explicit number rules for
@@ -89,19 +92,20 @@
  * @param {number=} offset Offset to deduct from the total number.
  *
  * @example
-    <example>
+    <example module="pluralizeExample">
       <file name="index.html">
         <script>
-          function Ctrl($scope) {
-            $scope.person1 = 'Igor';
-            $scope.person2 = 'Misko';
-            $scope.personCount = 1;
-          }
+          angular.module('pluralizeExample', [])
+            .controller('ExampleController', ['$scope', function($scope) {
+              $scope.person1 = 'Igor';
+              $scope.person2 = 'Misko';
+              $scope.personCount = 1;
+            }]);
         </script>
-        <div ng-controller="Ctrl">
-          Person 1:<input type="text" ng-model="person1" value="Igor" /><br/>
-          Person 2:<input type="text" ng-model="person2" value="Misko" /><br/>
-          Number of People:<input type="text" ng-model="personCount" value="1" /><br/>
+        <div ng-controller="ExampleController">
+          <label>Person 1:<input type="text" ng-model="person1" value="Igor" /></label><br/>
+          <label>Person 2:<input type="text" ng-model="person2" value="Misko" /></label><br/>
+          <label>Number of People:<input type="text" ng-model="personCount" value="1" /></label><br/>
 
           <!--- Example with simple pluralization rules for en locale --->
           Without Offset:
@@ -171,10 +175,11 @@
       </file>
     </example>
  */
-var ngPluralizeDirective = ['$locale', '$interpolate', function($locale, $interpolate) {
-  var BRACE = /{}/g;
+var ngPluralizeDirective = ['$locale', '$interpolate', '$log', function($locale, $interpolate, $log) {
+  var BRACE = /{}/g,
+      IS_WHEN = /^when(Minus)?(.+)$/;
+
   return {
-    restrict: 'EA',
     link: function(scope, element, attr) {
       var numberExp = attr.count,
           whenExp = attr.$attr.when && element.attr(attr.$attr.when), // we have {{}} in attrs
@@ -183,34 +188,53 @@ var ngPluralizeDirective = ['$locale', '$interpolate', function($locale, $interp
           whensExpFns = {},
           startSymbol = $interpolate.startSymbol(),
           endSymbol = $interpolate.endSymbol(),
-          isWhen = /^when(Minus)?(.+)$/;
+          braceReplacement = startSymbol + numberExp + '-' + offset + endSymbol,
+          watchRemover = angular.noop,
+          lastCount;
 
       forEach(attr, function(expression, attributeName) {
-        if (isWhen.test(attributeName)) {
-          whens[lowercase(attributeName.replace('when', '').replace('Minus', '-'))] =
-            element.attr(attr.$attr[attributeName]);
+        var tmpMatch = IS_WHEN.exec(attributeName);
+        if (tmpMatch) {
+          var whenKey = (tmpMatch[1] ? '-' : '') + lowercase(tmpMatch[2]);
+          whens[whenKey] = element.attr(attr.$attr[attributeName]);
         }
       });
       forEach(whens, function(expression, key) {
-        whensExpFns[key] =
-          $interpolate(expression.replace(BRACE, startSymbol + numberExp + '-' +
-            offset + endSymbol));
+        whensExpFns[key] = $interpolate(expression.replace(BRACE, braceReplacement));
+
       });
 
-      scope.$watch(function ngPluralizeWatch() {
-        var value = parseFloat(scope.$eval(numberExp));
+      scope.$watch(numberExp, function ngPluralizeWatchAction(newVal) {
+        var count = parseFloat(newVal);
+        var countIsNaN = isNaN(count);
 
-        if (!isNaN(value)) {
-          //if explicit number rule such as 1, 2, 3... is defined, just use it. Otherwise,
-          //check it against pluralization rules in $locale service
-          if (!(value in whens)) value = $locale.pluralCat(value - offset);
-           return whensExpFns[value](scope);
-        } else {
-          return '';
+        if (!countIsNaN && !(count in whens)) {
+          // If an explicit number rule such as 1, 2, 3... is defined, just use it.
+          // Otherwise, check it against pluralization rules in $locale service.
+          count = $locale.pluralCat(count - offset);
         }
-      }, function ngPluralizeWatchAction(newVal) {
-        element.text(newVal);
+
+        // If both `count` and `lastCount` are NaN, we don't need to re-register a watch.
+        // In JS `NaN !== NaN`, so we have to exlicitly check.
+        if ((count !== lastCount) && !(countIsNaN && isNumber(lastCount) && isNaN(lastCount))) {
+          watchRemover();
+          var whenExpFn = whensExpFns[count];
+          if (isUndefined(whenExpFn)) {
+            if (newVal != null) {
+              $log.debug("ngPluralize: no rule defined for '" + count + "' in " + whenExp);
+            }
+            watchRemover = noop;
+            updateElementText();
+          } else {
+            watchRemover = scope.$watch(whenExpFn, updateElementText);
+          }
+          lastCount = count;
+        }
       });
+
+      function updateElementText(newText) {
+        element.text(newText || '');
+      }
     }
   };
 }];
