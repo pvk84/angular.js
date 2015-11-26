@@ -66,14 +66,32 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
     return (nO.addClass && nO.addClass === cO.removeClass) || (nO.removeClass && nO.removeClass === cO.addClass);
   });
 
-  this.$get = ['$$rAF', '$rootScope', '$rootElement', '$document', '$$body', '$$HashMap',
+  this.$get = ['$$rAF', '$rootScope', '$rootElement', '$document', '$$HashMap',
                '$$animation', '$$AnimateRunner', '$templateRequest', '$$jqLite', '$$forceReflow',
-       function($$rAF,   $rootScope,   $rootElement,   $document,   $$body,   $$HashMap,
+       function($$rAF,   $rootScope,   $rootElement,   $document,   $$HashMap,
                 $$animation,   $$AnimateRunner,   $templateRequest,   $$jqLite,   $$forceReflow) {
 
     var activeAnimationsLookup = new $$HashMap();
     var disabledElementsLookup = new $$HashMap();
     var animationsEnabled = null;
+
+    function postDigestTaskFactory() {
+      var postDigestCalled = false;
+      return function(fn) {
+        // we only issue a call to postDigest before
+        // it has first passed. This prevents any callbacks
+        // from not firing once the animation has completed
+        // since it will be out of the digest cycle.
+        if (postDigestCalled) {
+          fn();
+        } else {
+          $rootScope.$$postDigest(function() {
+            postDigestCalled = true;
+            fn();
+          });
+        }
+      };
+    }
 
     // Wait until all directive and route-related templates are downloaded and
     // compiled. The $templateRequest.totalPendingRequests variable keeps track of
@@ -121,8 +139,9 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
       return mergeAnimationOptions(element, options, {});
     }
 
-    function findCallbacks(element, event) {
+    function findCallbacks(parent, element, event) {
       var targetNode = getDomNode(element);
+      var targetParentNode = getDomNode(parent);
 
       var matches = [];
       var entries = callbackRegistry[event];
@@ -130,19 +149,13 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
         forEach(entries, function(entry) {
           if (entry.node.contains(targetNode)) {
             matches.push(entry.callback);
+          } else if (event === 'leave' && entry.node.contains(targetParentNode)) {
+            matches.push(entry.callback);
           }
         });
       }
 
       return matches;
-    }
-
-    function triggerCallback(event, element, phase, data) {
-      $$rAF(function() {
-        forEach(findCallbacks(element, event), function(callback) {
-          callback(element, phase, data);
-        });
-      });
     }
 
     return {
@@ -238,6 +251,9 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
       // we create a fake runner with a working promise.
       // These methods will become available after the digest has passed
       var runner = new $$AnimateRunner();
+
+      // this is used to trigger callbacks in postDigest mode
+      var runInNextPostDigestOrNow = postDigestTaskFactory();
 
       if (isArray(options.addClass)) {
         options.addClass = options.addClass.join(' ');
@@ -381,9 +397,6 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
         return runner;
       }
 
-      applyGeneratedPreparationClasses(element, isStructural ? event : null, options);
-      blockTransitions(node, SAFE_FAST_FORWARD_DURATION_VALUE);
-
       // the counter keeps track of cancelled animations
       var counter = (existingAnimation.counter || 0) + 1;
       newAnimation.counter = counter;
@@ -442,10 +455,7 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
             : animationDetails.event;
 
         markElementAnimationState(element, RUNNING_STATE);
-        var realRunner = $$animation(element, event, animationDetails.options, function(e) {
-          $$forceReflow();
-          blockTransitions(getDomNode(e), false);
-        });
+        var realRunner = $$animation(element, event, animationDetails.options);
 
         realRunner.done(function(status) {
           close(!status);
@@ -465,7 +475,20 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
       return runner;
 
       function notifyProgress(runner, event, phase, data) {
-        triggerCallback(event, element, phase, data);
+        runInNextPostDigestOrNow(function() {
+          var callbacks = findCallbacks(parent, element, event);
+          if (callbacks.length) {
+            // do not optimize this call here to RAF because
+            // we don't know how heavy the callback code here will
+            // be and if this code is buffered then this can
+            // lead to a performance regression.
+            $$rAF(function() {
+              forEach(callbacks, function(callback) {
+                callback(element, phase, data);
+              });
+            });
+          }
+        });
         runner.progress(event, phase, data);
       }
 
@@ -508,7 +531,8 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
     }
 
     function areAnimationsAllowed(element, parentElement, event) {
-      var bodyElementDetected = isMatchingElement(element, $$body) || element[0].nodeName === 'HTML';
+      var bodyElement = jqLite($document[0].body);
+      var bodyElementDetected = isMatchingElement(element, bodyElement) || element[0].nodeName === 'HTML';
       var rootElementDetected = isMatchingElement(element, $rootElement);
       var parentAnimationDetected = false;
       var animateChildren;
@@ -564,7 +588,7 @@ var $$AnimateQueueProvider = ['$animateProvider', function($animateProvider) {
         if (!bodyElementDetected) {
           // we also need to ensure that the element is or will be apart of the body element
           // otherwise it is pointless to even issue an animation to be rendered
-          bodyElementDetected = isMatchingElement(parentElement, $$body);
+          bodyElementDetected = isMatchingElement(parentElement, bodyElement);
         }
 
         parentElement = parentElement.parent();

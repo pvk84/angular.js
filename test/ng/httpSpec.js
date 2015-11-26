@@ -764,8 +764,8 @@ describe('$http', function() {
         $httpBackend.expect('POST', '/url', 'messageBody', function(headers) {
           return headers['accept'] == 'Rewritten' &&
                  headers['content-type'] == 'Content-Type Rewritten' &&
-                 headers['Accept'] === undefined &&
-                 headers['Content-Type'] === undefined;
+                 isUndefined(headers['Accept']) &&
+                 isUndefined(headers['Content-Type']);
         }).respond('');
 
         $http({url: '/url', method: 'POST', data: 'messageBody', headers: {
@@ -779,7 +779,7 @@ describe('$http', function() {
         mockedCookies['XSRF-TOKEN'] =  'secret';
         $browser.url('http://host.com/base');
         $httpBackend.expect('GET', 'http://www.test.com/url', undefined, function(headers) {
-          return headers['X-XSRF-TOKEN'] === undefined;
+          return isUndefined(headers['X-XSRF-TOKEN']);
         }).respond('');
 
         $http({url: 'http://www.test.com/url', method: 'GET', headers: {}});
@@ -933,12 +933,13 @@ describe('$http', function() {
       it('should handle empty response header', function() {
        $httpBackend.expect('GET', '/url', undefined)
            .respond(200, '', { 'Custom-Empty-Response-Header': '', 'Constructor': '' });
-       $http.get('/url').success(callback);
+       $http.get('/url').then(callback);
        $httpBackend.flush();
        expect(callback).toHaveBeenCalledOnce();
-       expect(callback.mostRecentCall.args[2]('custom-empty-response-Header')).toBe('');
-       expect(callback.mostRecentCall.args[2]('ToString')).toBe(null);
-       expect(callback.mostRecentCall.args[2]('Constructor')).toBe('');
+       var headers = callback.mostRecentCall.args[0].headers;
+       expect(headers('custom-empty-response-Header')).toEqual('');
+       expect(headers('ToString')).toBe(null);
+       expect(headers('Constructor')).toBe('');
      });
 
       it('should have delete()', function() {
@@ -1390,6 +1391,25 @@ describe('$http', function() {
           expect(callback).toHaveBeenCalledOnce();
           expect(callback.mostRecentCall.args[0]).toBe('RESP-FIRST:V1');
         });
+
+
+        it('should apply `transformResponse` even if the response data is empty', function(data) {
+          var callback = jasmine.createSpy('transformResponse');
+          var config = {transformResponse: callback};
+
+          $httpBackend.expect('GET', '/url1').respond(200, undefined);
+          $httpBackend.expect('GET', '/url2').respond(200, null);
+          $httpBackend.expect('GET', '/url3').respond(200, '');
+          $http.get('/url1', config);
+          $http.get('/url2', config);
+          $http.get('/url3', config);
+          $httpBackend.flush();
+
+          expect(callback.callCount).toBe(3);
+          expect(callback.calls[0].args[0]).toBe(undefined);
+          expect(callback.calls[1].args[0]).toBe(null);
+          expect(callback.calls[2].args[0]).toBe('');
+        });
       });
     });
 
@@ -1731,12 +1751,12 @@ describe('$http', function() {
 
         $httpBackend.expect('GET', '/some').respond(200);
 
-        $http({method: 'GET', url: '/some', timeout: canceler.promise}).error(
-            function(data, status, headers, config) {
-              expect(data).toBeUndefined();
-              expect(status).toBe(0);
-              expect(headers()).toEqual({});
-              expect(config.url).toBe('/some');
+        $http({method: 'GET', url: '/some', timeout: canceler.promise}).catch(
+            function(response) {
+              expect(response.data).toBeUndefined();
+              expect(response.status).toBe(-1);
+              expect(response.headers()).toEqual({});
+              expect(response.config.url).toBe('/some');
               callback();
             });
 

@@ -19,7 +19,7 @@ Help us keep Angular open and inclusive. Please read and follow our [Code of Con
 ## <a name="question"></a> Got a Question or Problem?
 
 If you have questions about how to use AngularJS, please direct these to the [Google Group][groups]
-discussion list or [StackOverflow][stackoverflow]. We are also available on [IRC][irc].
+discussion list or [StackOverflow][stackoverflow]. We are also available on [IRC][irc] and [Gitter][gitter].
 
 ## <a name="issue"></a> Found an Issue?
 If you find a bug in the source code or a mistake in the documentation, you can help us by
@@ -71,7 +71,7 @@ chances of your issue being dealt with quickly:
 * **Angular Version(s)** - is it a regression?
 * **Browsers and Operating System** - is this a problem with all browsers or only IE8?
 * **Reproduce the Error** - provide a live example (using [Plunker][plunker] or
-  [JSFiddle][jsfiddle]) or a unambiguous set of steps.
+  [JSFiddle][jsfiddle]) or an unambiguous set of steps.
 * **Related Issues** - has a similar issue been reported before?
 * **Suggest a Fix** - if you can't fix the bug yourself, perhaps you can point to what might be
   causing the problem (line of code or commit)
@@ -187,6 +187,8 @@ We have very precise rules over how our git commit messages can be formatted.  T
 readable messages** that are easy to follow when looking through the **project history**.  But also,
 we use the git commit messages to **generate the AngularJS change log**.
 
+The commit message formatting can be added using a typical git workflow or through the use of a CLI wizard ([Commitizen](https://github.com/commitizen/cz-cli)). To use the wizard, run `npm run commit` in your terminal after staging your changes in git.
+
 ### Commit Message Format
 Each commit message consists of a **header**, a **body** and a **footer**.  The header has a special
 format that includes a **type**, a **scope** and a **subject**:
@@ -268,6 +270,7 @@ You can find out more detailed information about contributing in the
 [corporate-cla]: http://code.google.com/legal/corporate-cla-v1.0.html
 [dev-doc]: https://docs.angularjs.org/guide
 [github]: https://github.com/angular/angular.js
+[gitter]: https://gitter.im/angular/angular.js
 [groups]: https://groups.google.com/forum/?fromgroups#!forum/angular
 [individual-cla]: http://code.google.com/legal/individual-cla-v1.0.html
 [irc]: http://webchat.freenode.net/?channels=angularjs&uio=d4

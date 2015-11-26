@@ -141,14 +141,14 @@ function LocationHtml5Url(appBase, appBaseNoFile, basePrefix) {
     var appUrl, prevAppUrl;
     var rewrittenUrl;
 
-    if ((appUrl = beginsWith(appBase, url)) !== undefined) {
+    if (isDefined(appUrl = beginsWith(appBase, url))) {
       prevAppUrl = appUrl;
-      if ((appUrl = beginsWith(basePrefix, appUrl)) !== undefined) {
+      if (isDefined(appUrl = beginsWith(basePrefix, appUrl))) {
         rewrittenUrl = appBaseNoFile + (beginsWith('/', appUrl) || appUrl);
       } else {
         rewrittenUrl = appBase + prevAppUrl;
       }
-    } else if ((appUrl = beginsWith(appBaseNoFile, url)) !== undefined) {
+    } else if (isDefined(appUrl = beginsWith(appBaseNoFile, url))) {
       rewrittenUrl = appBaseNoFile + appUrl;
     } else if (appBaseNoFile == url + '/') {
       rewrittenUrl = appBaseNoFile;
@@ -574,9 +574,9 @@ var locationPrototype = {
    * @description
    * This method is getter / setter.
    *
-   * Return hash fragment when called without any parameter.
+   * Returns the hash fragment when called without any parameters.
    *
-   * Change hash fragment when called with parameter and return `$location`.
+   * Changes the hash fragment when called with a parameter and returns `$location`.
    *
    *
    * ```js
@@ -597,8 +597,8 @@ var locationPrototype = {
    * @name $location#replace
    *
    * @description
-   * If called, all changes to $location during current `$digest` will be replacing current history
-   * record, instead of adding new one.
+   * If called, all changes to $location during the current `$digest` will replace the current history
+   * record, instead of adding a new one.
    */
   replace: function() {
     this.$$replace = true;
@@ -918,7 +918,7 @@ function $LocationProvider() {
         var oldUrl = $location.absUrl();
         var oldState = $location.$$state;
         var defaultPrevented;
-
+        newUrl = trimEmptyHash(newUrl);
         $location.$$parse(newUrl);
         $location.$$state = newState;
 

@@ -313,10 +313,18 @@ describe('angular', function() {
     it('should throw an exception if a Scope is being copied', inject(function($rootScope) {
       expect(function() { copy($rootScope.$new()); }).
           toThrowMinErr("ng", "cpws", "Can't copy! Making copies of Window or Scope instances is not supported.");
+      expect(function() { copy({child: $rootScope.$new()}, {}); }).
+          toThrowMinErr("ng", "cpws", "Can't copy! Making copies of Window or Scope instances is not supported.");
+      expect(function() { copy([$rootScope.$new()]); }).
+          toThrowMinErr("ng", "cpws", "Can't copy! Making copies of Window or Scope instances is not supported.");
     }));
 
     it('should throw an exception if a Window is being copied', function() {
       expect(function() { copy(window); }).
+          toThrowMinErr("ng", "cpws", "Can't copy! Making copies of Window or Scope instances is not supported.");
+      expect(function() { copy({child: window}); }).
+          toThrowMinErr("ng", "cpws", "Can't copy! Making copies of Window or Scope instances is not supported.");
+      expect(function() { copy([window], []); }).
           toThrowMinErr("ng", "cpws", "Can't copy! Making copies of Window or Scope instances is not supported.");
     });
 
@@ -334,6 +342,11 @@ describe('angular', function() {
       hashKey(src);
       dst = copy(src);
       expect(hashKey(dst)).not.toEqual(hashKey(src));
+
+      src = {foo: {}};
+      hashKey(src.foo);
+      dst = copy(src);
+      expect(hashKey(src.foo)).not.toEqual(hashKey(dst.foo));
     });
 
     it('should retain the previous $$hashKey when copying object with hashKey', function() {
@@ -384,6 +397,18 @@ describe('angular', function() {
       expect(aCopy).toBe(copyTo);
       expect(aCopy).not.toBe(a);
       expect(aCopy).toBe(aCopy.self);
+    });
+
+    it('should deeply copy XML nodes', function() {
+      var anElement = document.createElement('foo');
+      anElement.appendChild(document.createElement('bar'));
+      var theCopy = anElement.cloneNode(true);
+      expect(copy(anElement).outerHTML).toEqual(theCopy.outerHTML);
+      expect(copy(anElement)).not.toBe(anElement);
+    });
+
+    it('should not try to call a non-function called `cloneNode`', function() {
+      expect(copy.bind(null, { cloneNode: 100 })).not.toThrow();
     });
 
     it('should handle objects with multiple references', function() {
@@ -449,6 +474,7 @@ describe('angular', function() {
   });
 
   describe("extend", function() {
+
     it('should not copy the private $$hashKey', function() {
       var src,dst;
       src = {};
@@ -458,6 +484,24 @@ describe('angular', function() {
       expect(hashKey(dst)).not.toEqual(hashKey(src));
     });
 
+
+    it('should copy the properties of the source object onto the destination object', function() {
+      var destination, source;
+      destination = {};
+			source = {foo: true};
+      destination = extend(destination, source);
+      expect(isDefined(destination.foo)).toBe(true);
+    });
+
+
+    it('ISSUE #4751 - should copy the length property of an object source to the destination object', function() {
+      var destination, source;
+      destination = {};
+      source = {radius: 30, length: 0};
+      destination = extend(destination, source);
+      expect(isDefined(destination.length)).toBe(true);
+      expect(isDefined(destination.radius)).toBe(true);
+    });
 
     it('should retain the previous $$hashKey', function() {
       var src,dst,h;
@@ -490,6 +534,17 @@ describe('angular', function() {
       extend(dst, src);
 
       expect(dst.date).toBe(src.date);
+    });
+
+    it('should copy elements by reference', function() {
+      var src = { element: document.createElement('div'),
+        jqObject: jqLite("<p><span>s1</span><span>s2</span></p>").find("span") };
+      var dst = {};
+
+      extend(dst, src);
+
+      expect(dst.element).toBe(src.element);
+      expect(dst.jqObject).toBe(src.jqObject);
     });
   });
 
@@ -580,6 +635,25 @@ describe('angular', function() {
       expect(dst.regexp).not.toBe(src.regexp);
       expect(isRegExp(dst.regexp)).toBe(true);
       expect(dst.regexp.toString()).toBe(src.regexp.toString());
+    });
+
+
+    it('should copy(clone) elements', function() {
+      var src = {
+        element: document.createElement('div'),
+        jqObject: jqLite('<p><span>s1</span><span>s2</span></p>').find('span')
+      };
+      var dst = {};
+
+      merge(dst, src);
+
+      expect(dst.element).not.toBe(src.element);
+      expect(dst.jqObject).not.toBe(src.jqObject);
+
+      expect(isElement(dst.element)).toBeTruthy();
+      expect(dst.element.nodeName).toBeDefined(); // i.e it is a DOM element
+      expect(isElement(dst.jqObject)).toBeTruthy();
+      expect(dst.jqObject.nodeName).toBeUndefined(); // i.e it is a jqLite/jQuery object
     });
   });
 
@@ -1023,6 +1097,42 @@ describe('angular', function() {
     });
   });
 
+  describe('isArrayLike', function() {
+
+    it('should return false if passed a number', function() {
+      expect(isArrayLike(10)).toBe(false);
+    });
+
+    it('should return true if passed an array', function() {
+      expect(isArrayLike([1,2,3,4])).toBe(true);
+    });
+
+    it('should return true if passed an object', function() {
+      expect(isArrayLike({0:"test", 1:"bob", 2:"tree", length:3})).toBe(true);
+    });
+
+    it('should return true if passed arguments object', function() {
+      function test(a,b,c) {
+        expect(isArrayLike(arguments)).toBe(true);
+      }
+      test(1,2,3);
+    });
+
+    it('should return true if passed a nodelist', function() {
+      var nodes = document.body.childNodes;
+      expect(isArrayLike(nodes)).toBe(true);
+    });
+
+    it('should return false for objects with `length` but no matching indexable items', function() {
+      var obj = {
+        a: 'a',
+        b:'b',
+        length: 10
+      };
+      expect(isArrayLike(obj)).toBe(false);
+    });
+  });
+
 
   describe('forEach', function() {
     it('should iterate over *own* object properties', function() {
@@ -1062,6 +1172,11 @@ describe('angular', function() {
 
       forEach(jqObject, function(value, key) { log.push(key + ':' + value.innerHTML); });
       expect(log).toEqual(['0:s1', '1:s2']);
+
+      log = [];
+      jqObject = jqLite("<pane></pane>");
+      forEach(jqObject.children(), function(value, key) { log.push(key + ':' + value.innerHTML); });
+      expect(log).toEqual([]);
     });
 
 

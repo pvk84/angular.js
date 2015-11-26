@@ -1679,11 +1679,10 @@ describe('parser', function() {
   forEach([true, false], function(cspEnabled) {
     describe('csp: ' + cspEnabled, function() {
 
-      beforeEach(module(function($provide) {
-        $provide.decorator('$sniffer', function($delegate) {
-          $delegate.csp = cspEnabled;
-          return $delegate;
-        });
+      beforeEach(module(function() {
+        expect(csp().noUnsafeEval === true ||
+               csp().noUnsafeEval === false).toEqual(true);
+        csp().noUnsafeEval = cspEnabled;
       }, provideLog));
 
       beforeEach(inject(function($rootScope) {
@@ -2120,9 +2119,8 @@ describe('parser', function() {
 
         expect(scope.$eval('items[1] = "abc"')).toEqual("abc");
         expect(scope.$eval('items[1]')).toEqual("abc");
-    //    Dont know how to make this work....
-    //    expect(scope.$eval('books[1] = "moby"')).toEqual("moby");
-    //    expect(scope.$eval('books[1]')).toEqual("moby");
+        expect(scope.$eval('books[1] = "moby"')).toEqual("moby");
+        expect(scope.$eval('books[1]')).toEqual("moby");
       });
 
       it('should evaluate grouped filters', function() {
@@ -2669,6 +2667,20 @@ describe('parser', function() {
               scope.$eval('{}["__proto__"].foo = 1');
             }).toThrowMinErr('$parse', 'isecfld');
 
+            expect(function() {
+              scope.$eval('{}[["__proto__"]]');
+            }).toThrowMinErr('$parse', 'isecfld');
+            expect(function() {
+              scope.$eval('{}[["__proto__"]].foo = 1');
+            }).toThrowMinErr('$parse', 'isecfld');
+
+            expect(function() {
+              scope.$eval('0[["__proto__"]]');
+            }).toThrowMinErr('$parse', 'isecfld');
+            expect(function() {
+              scope.$eval('0[["__proto__"]].foo = 1');
+            }).toThrowMinErr('$parse', 'isecfld');
+
             scope.a = "__pro";
             scope.b = "to__";
             expect(function() {
@@ -2680,6 +2692,15 @@ describe('parser', function() {
           });
         });
 
+       it('should prevent the exploit', function() {
+          expect(function() {
+            scope.$eval('(1)[{0: "__proto__", 1: "__proto__", 2: "__proto__", 3: "safe", length: 4, toString: [].pop}].foo = 1');
+          }).toThrow();
+          if (!msie || msie > 10) {
+            expect((1)['__proto__'].foo).toBeUndefined();
+          }
+       });
+
         it('should prevent the exploit', function() {
           expect(function() {
             scope.$eval('' +
@@ -2689,6 +2710,35 @@ describe('parser', function() {
                 '"alert(1)"' +
               ')()' +
               '');
+          }).toThrow();
+        });
+
+        it('should prevent assigning in the context of a constructor', function() {
+          expect(function() {
+            scope.$eval("''.constructor.join");
+          }).not.toThrow();
+          expect(function() {
+            scope.$eval("''.constructor.join = ''.constructor.join");
+          }).toThrow();
+          expect(function() {
+            scope.$eval("''.constructor[0] = ''");
+          }).toThrow();
+          expect(function() {
+            scope.$eval("(0).constructor[0] = ''");
+          }).toThrow();
+          expect(function() {
+            scope.$eval("{}.constructor[0] = ''");
+          }).toThrow();
+          // foo.constructor is the object constructor.
+          expect(function() {
+            scope.$eval("foo.constructor[0] = ''", {foo: {}});
+          }).toThrow();
+          // foo.constructor is not a constructor.
+          expect(function() {
+            scope.$eval("foo.constructor[0] = ''", {foo: {constructor: ''}});
+          }).not.toThrow();
+          expect(function() {
+            scope.$eval("objConstructor = {}.constructor; objConstructor.join = ''");
           }).toThrow();
         });
       });
@@ -2795,6 +2845,14 @@ describe('parser', function() {
           var scope = {};
           fn.assign(scope, 123);
           expect(scope).toEqual({a:123});
+        }));
+
+        it('should return the assigned value', inject(function($parse) {
+          var fn = $parse('a');
+          var scope = {};
+          expect(fn.assign(scope, 123)).toBe(123);
+          var someObject = {};
+          expect(fn.assign(scope, someObject)).toBe(someObject);
         }));
 
         it('should expose working assignment function for expressions ending with brackets', inject(function($parse) {
@@ -3103,6 +3161,17 @@ describe('parser', function() {
           expect(called).toBe(false);
 
           scope.a++;
+          scope.$digest();
+          expect(called).toBe(true);
+        }));
+
+        it('should invoke interceptors when the expression is `undefined`', inject(function($parse) {
+          var called = false;
+          function interceptor(v) {
+            called = true;
+            return v;
+          }
+          scope.$watch($parse(undefined, interceptor));
           scope.$digest();
           expect(called).toBe(true);
         }));

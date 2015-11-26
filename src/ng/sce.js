@@ -294,7 +294,7 @@ function $SceDelegateProvider() {
             'Attempted to trust a value in invalid context. Context: {0}; Value: {1}',
             type, trustedValue);
       }
-      if (trustedValue === null || trustedValue === undefined || trustedValue === '') {
+      if (trustedValue === null || isUndefined(trustedValue) || trustedValue === '') {
         return trustedValue;
       }
       // All the current contexts in SCE_CONTEXTS happen to be strings.  In order to avoid trusting
@@ -342,6 +342,11 @@ function $SceDelegateProvider() {
      * returns the originally supplied value if the queried context type is a supertype of the
      * created type.  If this condition isn't satisfied, throws an exception.
      *
+     * <div class="alert alert-danger">
+     * Disabling auto-escaping is extremely dangerous, it usually creates a Cross Site Scripting
+     * (XSS) vulnerability in your application.
+     * </div>
+     *
      * @param {string} type The kind of context in which this value is to be used.
      * @param {*} maybeTrusted The result of a prior {@link ng.$sceDelegate#trustAs
      *     `$sceDelegate.trustAs`} call.
@@ -349,7 +354,7 @@ function $SceDelegateProvider() {
      *     `$sceDelegate.trustAs`} if valid in this context.  Otherwise, throws an exception.
      */
     function getTrusted(type, maybeTrusted) {
-      if (maybeTrusted === null || maybeTrusted === undefined || maybeTrusted === '') {
+      if (maybeTrusted === null || isUndefined(maybeTrusted) || maybeTrusted === '') {
         return maybeTrusted;
       }
       var constructor = (byType.hasOwnProperty(type) ? byType[type] : null);
@@ -484,7 +489,7 @@ function $SceDelegateProvider() {
  * By default, Angular only loads templates from the same domain and protocol as the application
  * document.  This is done by calling {@link ng.$sce#getTrustedResourceUrl
  * $sce.getTrustedResourceUrl} on the template URL.  To load templates from other domains and/or
- * protocols, you may either either {@link ng.$sceDelegateProvider#resourceUrlWhitelist whitelist
+ * protocols, you may either {@link ng.$sceDelegateProvider#resourceUrlWhitelist whitelist
  * them} or {@link ng.$sce#trustAsResourceUrl wrap it} into a trusted value.
  *
  * *Please note*:

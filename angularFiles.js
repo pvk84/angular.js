@@ -14,6 +14,8 @@ var angularFiles = {
 
     'src/ng/anchorScroll.js',
     'src/ng/animate.js',
+    'src/ng/animateRunner.js',
+    'src/ng/animateCss.js',
     'src/ng/browser.js',
     'src/ng/cacheFactory.js',
     'src/ng/compile.js',
@@ -91,7 +93,7 @@ var angularFiles = {
   'angularModules': {
     'ngAnimate': [
       'src/ngAnimate/shared.js',
-      'src/ngAnimate/body.js',
+      'src/ngAnimate/rafScheduler.js',
       'src/ngAnimate/animateChildrenDirective.js',
       'src/ngAnimate/animateCss.js',
       'src/ngAnimate/animateCssDriver.js',
@@ -100,6 +102,7 @@ var angularFiles = {
       'src/ngAnimate/animateQueue.js',
       'src/ngAnimate/animateRunner.js',
       'src/ngAnimate/animation.js',
+      'src/ngAnimate/ngAnimateSwap.js',
       'src/ngAnimate/module.js'
     ],
     'ngCookies': [
